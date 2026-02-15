@@ -167,7 +167,7 @@ def get_indicator_data(indicator_name, days=365):
         SELECT date, value 
         FROM economic_indicators 
         WHERE indicator_name = %s 
-        AND date >= CURRENT_DATE - INTERVAL '{} days'
+        AND date >= date('now', '-{} days')
         ORDER BY date
     """.format(days)
     df = pd.read_sql_query(query, conn, params=(indicator_name,))
@@ -455,7 +455,7 @@ def show_dashboard():
         SELECT date, location, value 
         FROM property_data 
         WHERE metric_name = 'median_price'
-        AND date >= date('now', '-12 months')
+        AND date >= CURRENT_DATE - INTERVAL '12 months'
         ORDER BY date, location
     """
     
@@ -547,7 +547,7 @@ Based on the available data, the Australian property market shows mixed signals:
             if st.button("💾 Save", type="primary", key="save_commentary"):
                 cursor_comment.execute("""
                     INSERT OR REPLACE INTO market_commentary (id, commentary, updated_date)
-                    VALUES (1, %s, date('now'))
+                    VALUES (1, %s, CURRENT_DATE)
                 """, (new_commentary,))
                 conn_comment.commit()
                 st.success("✅ Commentary saved!")
@@ -557,7 +557,7 @@ Based on the available data, the Australian property market shows mixed signals:
             if st.button("🔄 Reset to Default", key="reset_commentary"):
                 cursor_comment.execute("""
                     INSERT OR REPLACE INTO market_commentary (id, commentary, updated_date)
-                    VALUES (1, %s, date('now'))
+                    VALUES (1, %s, CURRENT_DATE)
                 """, (default_commentary,))
                 conn_comment.commit()
                 st.success("✅ Reset to default!")
@@ -1011,7 +1011,7 @@ def show_location_analysis():
         FROM property_data 
         WHERE location IN (?, %s) 
         AND metric_name = 'median_price'
-        AND date >= date('now', '-12 months')
+        AND date >= CURRENT_DATE - INTERVAL '12 months'
         ORDER BY date
     """
     
@@ -1840,4 +1840,3 @@ Please analyze this data and provide insights on:
 
 if __name__ == "__main__":
     main()
-
