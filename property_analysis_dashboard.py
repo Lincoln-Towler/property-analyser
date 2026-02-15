@@ -23,6 +23,30 @@ import json
 import sqlite3
 from pathlib import Path
 
+# Database connection helper
+def get_db_connection():
+    """Get database connection - works with both local SQLite and Turso"""
+    try:
+        # Try Turso connection (for deployed app)
+        if "turso" in st.secrets:
+            import urllib.request
+            url = st.secrets["turso"]["database_url"]
+            auth_token = st.secrets["turso"]["auth_token"]
+            
+            # Use libsql-experimental for Turso
+            try:
+                from libsql_experimental import dbapi2 as libsql
+                return libsql.connect(database=url, auth_token=auth_token)
+            except ImportError:
+                st.error("libsql_experimental not installed. Run: pip install libsql-experimental")
+                st.stop()
+        else:
+            # Local development - use regular SQLite
+            return sqlite3.connect("property_data.db")
+    except Exception as e:
+        # Fallback to local SQLite
+        return sqlite3.connect("property_data.db")
+
 # Page configuration
 st.set_page_config(
     page_title="Australian Property Investment Analyzer",
@@ -67,12 +91,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Database setup
+# Database setup - No longer needed with Turso, kept for compatibility
 DB_PATH = Path("property_data.db")
 
 def init_database():
     """Initialize SQLite database with required tables"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     # Economic indicators table
@@ -119,7 +143,7 @@ def init_database():
 
 def get_indicator_data(indicator_name, days=365):
     """Fetch historical data for a specific indicator"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     query = """
         SELECT date, value 
         FROM economic_indicators 
@@ -141,7 +165,7 @@ def calculate_market_score():
     }
     
     # Example scoring logic (to be replaced with real data)
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     # Check latest values for key indicators
@@ -300,7 +324,7 @@ def show_dashboard():
     col1, col2, col3, col4 = st.columns(4)
     
     # Pull real metrics from database
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     def get_latest_indicator(indicator_name):
@@ -405,7 +429,7 @@ def show_dashboard():
     st.subheader("Recent Trends (Last 12 Months)")
     
     # Query database for property data
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     
     # Get median price data for all locations
     query = """
@@ -454,7 +478,7 @@ def show_dashboard():
         edit_mode = st.button("✏️ Edit", key="edit_commentary_btn")
     
     # Get commentary from database or use default
-    conn_comment = sqlite3.connect(DB_PATH)
+    conn_comment = get_db_connection()
     cursor_comment = conn_comment.cursor()
     
     # Create commentary table if it doesn't exist
@@ -540,7 +564,7 @@ def show_economic_indicators():
     """)
     
     # Helper function to get latest indicator value
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     def get_indicator_value(indicator_name):
@@ -695,7 +719,7 @@ def show_economic_indicators():
     st.subheader("Historical Trends")
     
     # Get available indicators from database
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT DISTINCT indicator_name FROM economic_indicators ORDER BY indicator_name")
     available_indicators = [row[0] for row in cursor.fetchall()]
@@ -816,7 +840,7 @@ def show_location_analysis():
     st.markdown("Compare property markets across different Australian cities and regions.")
     
     # Get available locations from database
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT DISTINCT location FROM property_data ORDER BY location")
     available_locations = [row[0] for row in cursor.fetchall()]
@@ -1205,7 +1229,7 @@ def show_data_management():
             
             if st.button("Add Indicator Data"):
                 try:
-                    conn = sqlite3.connect(DB_PATH)
+                    conn = get_db_connection()
                     cursor = conn.cursor()
                     cursor.execute("""
                         INSERT OR REPLACE INTO economic_indicators (date, indicator_name, value, source)
@@ -1222,7 +1246,7 @@ def show_data_management():
             
             with col1:
                 # Get existing locations from database
-                conn_temp = sqlite3.connect(DB_PATH)
+                conn_temp = get_db_connection()
                 cursor_temp = conn_temp.cursor()
                 cursor_temp.execute("SELECT DISTINCT location FROM property_data ORDER BY location")
                 existing_locations = [row[0] for row in cursor_temp.fetchall()]
@@ -1265,7 +1289,7 @@ def show_data_management():
             
             if st.button("Add Property Data"):
                 try:
-                    conn = sqlite3.connect(DB_PATH)
+                    conn = get_db_connection()
                     cursor = conn.cursor()
                     cursor.execute("""
                         INSERT OR REPLACE INTO property_data (date, location, metric_name, value, source)
@@ -1306,7 +1330,7 @@ def show_data_management():
         
         view_type = st.selectbox("Select Data Type", ["Economic Indicators", "Property Data"])
         
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db_connection()
         
         if view_type == "Economic Indicators":
             df = pd.read_sql_query("""
@@ -1550,7 +1574,7 @@ def show_data_management():
         You can also use this to backup your data or analyze it in Excel/Google Sheets.
         """)
         
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db_connection()
         
         # Get all data for summary
         economic_df = pd.read_sql_query("SELECT * FROM economic_indicators ORDER BY date DESC", conn)
