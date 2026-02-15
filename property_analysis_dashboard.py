@@ -1037,28 +1037,37 @@ def show_dashboard():
     """Main dashboard view with overall market assessment"""
     st.header("Market Overview Dashboard")
     
-    # Overall market score
-    score, signal = calculate_market_score()
+    # Overall market score with Phase 1/2/3 enhancements
+    conn_score = get_db_connection()
+    score, signal, breakdown = calculate_market_score_v3(conn_score)
+    conn_score.close()
     
     col1, col2, col3 = st.columns([2, 2, 3])
     
     with col1:
+        confidence = breakdown.get('confidence_interval', {})
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.metric("Overall Market Score", f"{score:.0f}/100")
+        st.metric("Overall Market Score", f"{score:.0f}/100", delta=f"±{confidence.get('range', 0):.0f}")
+        st.caption(f"Confidence: {confidence.get('level', 'Unknown')}")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
-        if signal in ["Strong Buy", "Buy"]:
+        signal_clean = signal.split('(')[0].strip()
+        if "Strong Buy" in signal or "Buy" in signal:
             card_class = "success-card"
-        elif signal == "Hold":
+        elif "Hold" in signal or "Moderate" in signal:
             card_class = "metric-card"
-        elif signal == "Caution":
+        elif "Caution" in signal:
             card_class = "warning-card"
         else:
             card_class = "danger-card"
         
         st.markdown(f'<div class="{card_class}">', unsafe_allow_html=True)
-        st.metric("Signal", signal)
+        st.metric("Signal", signal_clean)
+        if 'Low Confidence' in signal:
+            st.caption("⚠️ Low confidence")
+        elif 'Medium Confidence' in signal:
+            st.caption("📊 Medium confidence")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col3:
@@ -1086,6 +1095,27 @@ def show_dashboard():
         ))
         fig.update_layout(height=250, margin=dict(l=20, r=20, t=40, b=20))
         st.plotly_chart(fig, use_container_width=True, key="dashboard_market_gauge")
+    
+    # Quick Sub-Scores Preview
+    st.markdown("### 🎯 Quick Analysis")
+    sub_scores = breakdown.get("sub_scores", {})
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        afford = sub_scores.get("affordability", 50)
+        st.metric("💰 Affordability", f"{afford:.0f}/100")
+    with col2:
+        supply = sub_scores.get("supply_demand", 50)
+        st.metric("⚖️ Supply/Demand", f"{supply:.0f}/100")
+    with col3:
+        health = sub_scores.get("financial_stress", 50)
+        st.metric("💪 Financial Health", f"{health:.0f}/100")
+    with col4:
+        momentum = sub_scores.get("momentum", 50)
+        st.metric("📈 Momentum", f"{momentum:.0f}/100")
+    
+    st.caption("💡 See Ultimate Analysis page for full breakdown")
+    
     
     st.markdown("---")
     
