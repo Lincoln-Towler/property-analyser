@@ -174,73 +174,412 @@ def get_indicator_data(indicator_name, days=365):
     conn.close()
     return df
 
-def calculate_market_score():
-    """Calculate overall market condition score (0-100)"""
-    # This is a simplified version - you'll enhance this with real logic
-    scores = {
-        'bearish_indicators': 0,
-        'bullish_indicators': 0,
-        'neutral_indicators': 0
-    }
+
+
+"""
+Enhanced Market Score Calculation with Phase 1 Improvements:
+- Weighted indicator system
+- Trend analysis (3-month momentum)
+- 18.6 year cycle position adjustment
+- Composite risk conditions
+"""
+
+def get_indicator_trend(conn, indicator_name, months=3):
+    """
+    Calculate trend direction for an indicator over the last N months
+    Returns: ('improving'|'stable'|'deteriorating', change_percentage)
+    """
+    import psycopg2
+    is_pg = isinstance(conn, psycopg2.extensions.connection)
     
-    # Example scoring logic (to be replaced with real data)
-    conn = get_db_connection()
+    if is_pg:
+        query = """
+            SELECT date, value 
+            FROM economic_indicators 
+            WHERE indicator_name = %s 
+            AND date >= CURRENT_DATE - INTERVAL '{} months'
+            ORDER BY date DESC
+            LIMIT 2
+        """.format(months)
+        params = (indicator_name,)
+    else:
+        query = """
+            SELECT date, value 
+            FROM economic_indicators 
+            WHERE indicator_name = ? 
+            AND date >= date('now', '-{} months')
+            ORDER BY date DESC
+            LIMIT 2
+        """.format(months)
+        params = (indicator_name,)
+    
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    results = cursor.fetchall()
+    
+    if len(results) < 2:
+        return 'stable', 0
+    
+    latest_value = results[0][1] if is_pg else results[0][1]
+    previous_value = results[1][1] if is_pg else results[1][1]
+    
+    if previous_value == 0:
+        return 'stable', 0
+    
+    change_pct = ((latest_value - previous_value) / previous_value) * 100
+    
+    # Determine if change is significant (>5%)
+    if abs(change_pct) < 5:
+        return 'stable', change_pct
+    elif change_pct > 0:
+        return 'rising', change_pct
+    else:
+        return 'falling', change_pct
+
+
+def calculate_market_score_v2(conn=None):
+    """
+    Enhanced market score calculation with weighted indicators, trends, and cycle adjustment
+    Returns: (score, signal, breakdown_dict)
+    """
+    from datetime import datetime
+    import psycopg2
+    
+    if conn is None:
+        # Import get_db_connection if needed
+        return 50, "No Connection", {}
+    
+    is_pg = isinstance(conn, psycopg2.extensions.connection)
     cursor = conn.cursor()
     
-    # Check latest values for key indicators
+    # PHASE 1: WEIGHTED INDICATORS CONFIGURATION
     indicators_config = {
-        'household_debt_gdp': {'threshold': 110, 'type': 'bearish_above'},
-        'mortgage_stress_rate': {'threshold': 30, 'type': 'bearish_above'},
-        'rental_vacancy_rate': {'threshold': 2, 'type': 'bullish_below'},
-        'auction_clearance_rate': {'threshold': 65, 'type': 'bullish_above'},
-        'unemployment_rate': {'threshold': 5, 'type': 'bearish_above'},
+        # CRITICAL INDICATORS (Weight: 25-30)
+        'interest_rate': {
+            'weight': 30,
+            'optimal_min': 2.5,
+            'optimal_max': 4.0,
+            'danger_above': 5.5,
+            'impact': 'inverse',  # Higher = worse for property
+            'trend_matters': True,
+            'description': 'RBA Cash Rate'
+        },
+        'household_debt_gdp': {
+            'weight': 25,
+            'warning_above': 110,
+            'danger_above': 120,
+            'optimal_below': 100,
+            'impact': 'inverse',
+            'trend_matters': True,
+            'description': 'Debt to GDP Ratio'
+        },
+        
+        # HIGH IMPORTANCE (Weight: 15-20)
+        'rental_vacancy_rate': {
+            'weight': 20,
+            'optimal_below': 2.0,
+            'healthy_range': (1.5, 2.5),
+            'oversupply_above': 3.5,
+            'impact': 'inverse',
+            'trend_matters': True,
+            'description': 'Rental Vacancy'
+        },
+        'building_approvals': {
+            'weight': 15,
+            'optimal_above': 240000,
+            'deficit_below': 180000,
+            'crisis_below': 160000,
+            'impact': 'direct',  # Higher = better (more supply coming)
+            'trend_matters': True,
+            'description': 'Annual Building Approvals'
+        },
+        
+        # MEDIUM IMPORTANCE (Weight: 10-15)
+        'mortgage_stress_rate': {
+            'weight': 15,
+            'warning_above': 30,
+            'danger_above': 40,
+            'healthy_below': 25,
+            'impact': 'inverse',
+            'trend_matters': True,
+            'description': 'Mortgage Stress %'
+        },
+        'unemployment_rate': {
+            'weight': 10,
+            'warning_above': 5.0,
+            'danger_above': 6.0,
+            'healthy_below': 4.5,
+            'impact': 'inverse',
+            'trend_matters': True,
+            'description': 'Unemployment Rate'
+        },
+        'auction_clearance_rate': {
+            'weight': 10,
+            'healthy_above': 65,
+            'strong_above': 75,
+            'weak_below': 55,
+            'impact': 'direct',
+            'trend_matters': True,
+            'description': 'Auction Clearance %'
+        },
+        
+        # SUPPORTING INDICATORS (Weight: 5)
+        'credit_growth': {
+            'weight': 5,
+            'healthy_range': (0.3, 0.8),
+            'strong_above': 1.0,
+            'weak_below': 0.2,
+            'impact': 'direct',
+            'trend_matters': False,
+            'description': 'Monthly Credit Growth %'
+        },
+        'wage_growth': {
+            'weight': 5,
+            'healthy_range': (3.0, 4.0),
+            'strong_above': 4.0,
+            'weak_below': 2.5,
+            'impact': 'direct',
+            'trend_matters': False,
+            'description': 'Annual Wage Growth %'
+        },
     }
     
-    for indicator, config in indicators_config.items():
-        cursor.execute("""
-            SELECT value FROM economic_indicators 
-            WHERE indicator_name = %s 
-            ORDER BY date DESC LIMIT 1
-        """, (indicator,))
+    # Storage for calculation details
+    indicator_scores = {}
+    total_weight = 0
+    weighted_score_sum = 0
+    data_quality = 0
+    total_possible_quality = len(indicators_config)
+    
+    # PHASE 2: CALCULATE SCORE FOR EACH INDICATOR
+    for indicator_name, config in indicators_config.items():
+        # Get latest value
+        if is_pg:
+            cursor.execute("""
+                SELECT value, date FROM economic_indicators 
+                WHERE indicator_name = %s 
+                ORDER BY date DESC LIMIT 1
+            """, (indicator_name,))
+        else:
+            cursor.execute("""
+                SELECT value, date FROM economic_indicators 
+                WHERE indicator_name = ? 
+                ORDER BY date DESC LIMIT 1
+            """, (indicator_name,))
+        
         result = cursor.fetchone()
         
-        if result:
-            value = result[0]
-            if config['type'] == 'bearish_above' and value > config['threshold']:
-                scores['bearish_indicators'] += 1
-            elif config['type'] == 'bullish_below' and value < config['threshold']:
-                scores['bullish_indicators'] += 1
-            elif config['type'] == 'bullish_above' and value > config['threshold']:
-                scores['bullish_indicators'] += 1
+        if not result:
+            # Missing data - skip this indicator
+            continue
+        
+        value = result[0]
+        date = result[1]
+        data_quality += 1
+        
+        # Calculate base score for this indicator (0-100)
+        indicator_score = 50  # Neutral starting point
+        
+        # Score based on thresholds
+        if config['impact'] == 'inverse':
+            # Lower is better
+            if 'optimal_below' in config and value < config['optimal_below']:
+                indicator_score = 85
+            elif 'healthy_below' in config and value < config['healthy_below']:
+                indicator_score = 75
+            elif 'warning_above' in config and value > config['warning_above']:
+                indicator_score = 35
+            elif 'danger_above' in config and value > config['danger_above']:
+                indicator_score = 15
+            elif 'optimal_min' in config and 'optimal_max' in config:
+                if config['optimal_min'] <= value <= config['optimal_max']:
+                    indicator_score = 80
+                elif value < config['optimal_min']:
+                    indicator_score = 65
+                elif value > config['danger_above']:
+                    indicator_score = 15
+                else:
+                    indicator_score = 40
+        
+        elif config['impact'] == 'direct':
+            # Higher is better
+            if 'optimal_above' in config and value >= config['optimal_above']:
+                indicator_score = 85
+            elif 'strong_above' in config and value >= config['strong_above']:
+                indicator_score = 75
+            elif 'healthy_above' in config and value >= config['healthy_above']:
+                indicator_score = 65
+            elif 'deficit_below' in config and value < config['deficit_below']:
+                indicator_score = 35
+            elif 'crisis_below' in config and value < config['crisis_below']:
+                indicator_score = 15
+            elif 'weak_below' in config and value < config['weak_below']:
+                indicator_score = 40
+        
+        # PHASE 3: TREND ADJUSTMENT
+        trend_bonus = 0
+        if config.get('trend_matters', False):
+            trend_direction, trend_change = get_indicator_trend(conn, indicator_name, months=3)
+            
+            if config['impact'] == 'inverse':
+                # For inverse indicators: falling = good, rising = bad
+                if trend_direction == 'falling':
+                    trend_bonus = 10
+                elif trend_direction == 'rising':
+                    trend_bonus = -10
             else:
-                scores['neutral_indicators'] += 1
+                # For direct indicators: rising = good, falling = bad
+                if trend_direction == 'rising':
+                    trend_bonus = 10
+                elif trend_direction == 'falling':
+                    trend_bonus = -10
+            
+            indicator_scores[indicator_name] = {
+                'value': value,
+                'score': indicator_score,
+                'trend': trend_direction,
+                'trend_change': trend_change,
+                'trend_bonus': trend_bonus,
+                'weight': config['weight'],
+                'description': config['description']
+            }
+        else:
+            indicator_scores[indicator_name] = {
+                'value': value,
+                'score': indicator_score,
+                'trend': 'n/a',
+                'trend_change': 0,
+                'trend_bonus': 0,
+                'weight': config['weight'],
+                'description': config['description']
+            }
+        
+        # Apply trend bonus and calculate weighted contribution
+        final_indicator_score = max(0, min(100, indicator_score + trend_bonus))
+        weighted_contribution = final_indicator_score * config['weight']
+        
+        weighted_score_sum += weighted_contribution
+        total_weight += config['weight']
     
-    conn.close()
+    # PHASE 4: CALCULATE BASE SCORE
+    if total_weight == 0:
+        return 50, "Insufficient Data", {'error': 'No data available'}
     
-    total = sum(scores.values())
-    if total == 0:
-        return 50, "Insufficient Data"
+    base_score = weighted_score_sum / total_weight
     
-    # Calculate weighted score
-    bearish_weight = scores['bearish_indicators'] * -20
-    bullish_weight = scores['bullish_indicators'] * 20
-    base_score = 50
+    # PHASE 5: COMPOSITE RISK CONDITIONS (Override Logic)
+    risk_warnings = []
     
-    final_score = base_score + ((bullish_weight + bearish_weight) / total)
-    final_score = max(0, min(100, final_score))  # Clamp between 0-100
+    # Get key values for composite checks
+    def get_value(name):
+        return indicator_scores.get(name, {}).get('value', None)
     
-    if final_score >= 70:
-        signal = "Strong Buy"
-    elif final_score >= 55:
-        signal = "Buy"
-    elif final_score >= 45:
-        signal = "Hold"
-    elif final_score >= 30:
-        signal = "Caution"
+    debt_gdp = get_value('household_debt_gdp')
+    interest_rate = get_value('interest_rate')
+    stress_rate = get_value('mortgage_stress_rate')
+    vacancy = get_value('rental_vacancy_rate')
+    approvals = get_value('building_approvals')
+    clearance = get_value('auction_clearance_rate')
+    unemployment = get_value('unemployment_rate')
+    
+    # PERFECT STORM (Multiple red flags)
+    if (debt_gdp and debt_gdp > 120 and 
+        interest_rate and interest_rate > 5.5 and 
+        stress_rate and stress_rate > 35):
+        base_score = min(base_score, 25)
+        risk_warnings.append("⚠️ PERFECT STORM: High debt + High rates + High stress")
+    
+    # CRISIS CONDITIONS (Extreme stress)
+    if (stress_rate and stress_rate > 40 and 
+        unemployment and unemployment > 6.0):
+        base_score = min(base_score, 30)
+        risk_warnings.append("🚨 CRISIS: Extreme mortgage stress + Rising unemployment")
+    
+    # SUPPLY SQUEEZE OPPORTUNITY (Strong fundamentals)
+    if (vacancy and vacancy < 1.5 and 
+        approvals and approvals < 180000 and 
+        clearance and clearance > 70):
+        base_score = min(100, base_score + 15)
+        risk_warnings.append("✨ OPPORTUNITY: Severe supply shortage + Strong demand")
+    
+    # OVERSUPPLY WARNING
+    if (vacancy and vacancy > 3.5 and 
+        approvals and approvals > 250000):
+        base_score = max(20, base_score - 15)
+        risk_warnings.append("⚠️ OVERSUPPLY: High vacancy + Excessive building")
+    
+    # PHASE 6: 18.6 YEAR CYCLE ADJUSTMENT
+    current_year = datetime.now().year
+    cycle_start_year = 2008  # GFC bottom (adjust as needed)
+    years_since_bottom = current_year - cycle_start_year
+    cycle_position = years_since_bottom % 18.6
+    
+    cycle_multiplier = 1.0
+    cycle_warning = ""
+    
+    if 14 <= cycle_position <= 18:
+        # PEAK ZONE - Be conservative
+        cycle_multiplier = 0.90
+        cycle_warning = "⚠️ Late Cycle (Year {:.0f}/18.6) - Exercise Caution".format(cycle_position)
+    elif 0 <= cycle_position <= 4:
+        # BOTTOM ZONE - Prime opportunity
+        cycle_multiplier = 1.10
+        cycle_warning = "✨ Early Cycle (Year {:.0f}/18.6) - Prime Opportunity Window".format(cycle_position)
+    elif 7 <= cycle_position <= 11:
+        # MID CYCLE - Goldilocks
+        cycle_multiplier = 1.05
+        cycle_warning = "📈 Mid Cycle (Year {:.0f}/18.6) - Strong Growth Phase".format(cycle_position)
     else:
-        signal = "Wait"
+        cycle_warning = "📊 Cycle Year {:.0f}/18.6".format(cycle_position)
     
-    return final_score, signal
+    # Apply cycle adjustment
+    final_score = base_score * cycle_multiplier
+    final_score = max(0, min(100, final_score))
+    
+    # PHASE 7: DETERMINE SIGNAL
+    if final_score >= 75:
+        signal = "🟢 Strong Buy"
+    elif final_score >= 60:
+        signal = "🟢 Buy"
+    elif final_score >= 50:
+        signal = "🟡 Moderate Buy"
+    elif final_score >= 40:
+        signal = "🟡 Hold"
+    elif final_score >= 30:
+        signal = "🟠 Caution"
+    else:
+        signal = "🔴 Wait"
+    
+    # PHASE 8: DATA QUALITY SCORE
+    data_completeness = (data_quality / total_possible_quality) * 100
+    
+    if data_completeness < 50:
+        signal += " (Low Confidence)"
+    
+    # Build breakdown for display
+    breakdown = {
+        'base_score': round(base_score, 1),
+        'cycle_multiplier': cycle_multiplier,
+        'final_score': round(final_score, 1),
+        'cycle_position': round(cycle_position, 1),
+        'cycle_warning': cycle_warning,
+        'risk_warnings': risk_warnings,
+        'indicator_scores': indicator_scores,
+        'data_completeness': round(data_completeness, 1),
+        'total_weight': total_weight
+    }
+    
+    return final_score, signal, breakdown
+
+
+# Legacy wrapper for compatibility
+def calculate_market_score():
+    """Wrapper for the enhanced v2 function for backward compatibility"""
+    conn = get_db_connection()
+    score, signal, breakdown = calculate_market_score_v2(conn)
+    conn.close()
+    return score, signal
+
 
 def main():
     # Initialize database
@@ -570,6 +909,102 @@ Based on the available data, the Australian property market shows mixed signals:
             st.caption(f"Last updated: {last_updated}")
     
     conn_comment.close()
+
+
+def show_enhanced_market_score():
+    """Display the enhanced market score with detailed breakdown"""
+    st.subheader("📊 Enhanced Market Score Analysis")
+    
+    conn = get_db_connection()
+    score, signal, breakdown = calculate_market_score_v2(conn)
+    conn.close()
+    
+    # Main score display
+    col1, col2, col3 = st.columns([2, 2, 3])
+    
+    with col1:
+        st.metric("Market Score", f"{breakdown['final_score']:.0f}/100", 
+                 delta=f"Base: {breakdown['base_score']:.0f}")
+    
+    with col2:
+        st.metric("Signal", signal)
+    
+    with col3:
+        st.info(breakdown['cycle_warning'])
+    
+    # Data quality indicator
+    st.progress(breakdown['data_completeness'] / 100)
+    st.caption(f"📈 Data Completeness: {breakdown['data_completeness']:.0f}% ({len(breakdown['indicator_scores'])}/9 indicators)")
+    
+    # Risk warnings
+    if breakdown['risk_warnings']:
+        st.markdown("### ⚠️ Market Alerts")
+        for warning in breakdown['risk_warnings']:
+            if "OPPORTUNITY" in warning:
+                st.success(warning)
+            elif "CRISIS" in warning or "STORM" in warning:
+                st.error(warning)
+            else:
+                st.warning(warning)
+    
+    # Detailed indicator breakdown
+    with st.expander("🔍 Detailed Indicator Breakdown", expanded=False):
+        st.markdown("### Individual Indicator Scores")
+        
+        # Sort by weight (most important first)
+        sorted_indicators = sorted(
+            breakdown['indicator_scores'].items(),
+            key=lambda x: x[1]['weight'],
+            reverse=True
+        )
+        
+        for indicator_name, details in sorted_indicators:
+            col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+            
+            with col1:
+                st.markdown(f"**{details['description']}**")
+                st.caption(f"Current: {details['value']:.2f}")
+            
+            with col2:
+                score_with_trend = details['score'] + details['trend_bonus']
+                score_color = "🟢" if score_with_trend >= 70 else "🟡" if score_with_trend >= 40 else "🔴"
+                st.markdown(f"{score_color} Score: {score_with_trend:.0f}/100")
+            
+            with col3:
+                if details['trend'] != 'n/a':
+                    trend_icon = "📈" if details['trend'] == 'rising' else "📉" if details['trend'] == 'falling' else "➡️"
+                    st.markdown(f"{trend_icon} {details['trend'].title()}")
+                    if details['trend_change'] != 0:
+                        st.caption(f"{details['trend_change']:+.1f}% (3mo)")
+                else:
+                    st.markdown("—")
+            
+            with col4:
+                st.caption(f"Weight: {details['weight']}")
+            
+            st.markdown("---")
+        
+        # Calculation explanation
+        st.markdown("### 📐 Score Calculation")
+        st.markdown(f"""
+        **Base Score:** {breakdown['base_score']:.1f}/100 (weighted average of all indicators)
+        
+        **Cycle Adjustment:** ×{breakdown['cycle_multiplier']:.2f} (Year {breakdown['cycle_position']:.0f} of 18.6-year cycle)
+        
+        **Final Score:** {breakdown['final_score']:.1f}/100
+        """)
+        
+        st.markdown("### ℹ️ How It Works")
+        st.markdown("""
+        The enhanced market score uses:
+        
+        1. **Weighted Indicators** - Critical factors (interest rates, debt) have 2-3x more impact than supporting indicators
+        2. **Trend Analysis** - Rising/falling trends add ±10 bonus points to reflect momentum
+        3. **Composite Risk Detection** - Multiple red flags trigger special warnings and score overrides
+        4. **18.6 Year Cycle** - Adjusts conservatively at cycle peaks, aggressively at bottoms
+        5. **Data Quality** - Lower confidence when <50% of indicators available
+        """)
+
 
 def show_economic_indicators():
     """Detailed view of economic indicators"""
