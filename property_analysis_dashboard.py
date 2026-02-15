@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 import json
 import sqlite3
 from pathlib import Path
+import numpy as np
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -572,6 +573,417 @@ def calculate_market_score_v2(conn=None):
     return final_score, signal, breakdown
 
 
+
+"""
+Phase 2 & 3 Enhancements for Property Analysis Dashboard
+- Additional critical indicators
+- Sub-score breakdown
+- Volatility analysis
+- Confidence intervals
+- Regional divergence analysis
+"""
+
+import numpy as np
+from datetime import datetime, timedelta
+
+def calculate_volatility_penalty(conn, indicator_name, months=6):
+    """
+    Calculate volatility penalty based on standard deviation
+    Returns: (penalty_score, std_dev, volatility_level)
+    """
+    import psycopg2
+    is_pg = isinstance(conn, psycopg2.extensions.connection)
+    
+    if is_pg:
+        query = """
+            SELECT value FROM economic_indicators 
+            WHERE indicator_name = %s 
+            AND date >= CURRENT_DATE - INTERVAL '{} months'
+            ORDER BY date DESC
+        """.format(months)
+        params = (indicator_name,)
+    else:
+        query = """
+            SELECT value FROM economic_indicators 
+            WHERE indicator_name = ? 
+            AND date >= date('now', '-{} months')
+            ORDER BY date DESC
+        """.format(months)
+        params = (indicator_name,)
+    
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    values = [row[0] for row in cursor.fetchall()]
+    
+    if len(values) < 3:
+        return 0, 0, 'insufficient_data'
+    
+    std_dev = np.std(values)
+    mean_val = np.mean(values)
+    
+    # Calculate coefficient of variation (normalized volatility)
+    if mean_val != 0:
+        cv = (std_dev / mean_val) * 100
+    else:
+        cv = 0
+    
+    # Determine volatility level and penalty
+    if cv > 20:
+        return -10, std_dev, 'extreme'
+    elif cv > 10:
+        return -5, std_dev, 'high'
+    elif cv > 5:
+        return -2, std_dev, 'moderate'
+    else:
+        return 0, std_dev, 'low'
+
+
+def calculate_sub_scores(conn, indicator_scores):
+    """
+    Calculate four sub-scores from indicator data
+    Returns: dict with affordability, supply_demand, financial_stress, momentum scores
+    """
+    
+    # Helper to get indicator value and score
+    def get_indicator(name):
+        return indicator_scores.get(name, {})
+    
+    # SUB-SCORE 1: AFFORDABILITY (0-100)
+    # Lower = more affordable = higher score
+    affordability_components = []
+    
+    # Interest rates (weight 40%)
+    interest = get_indicator('interest_rate')
+    if interest:
+        affordability_components.append(interest.get('score', 50) * 0.4)
+    
+    # Household debt (weight 30%)
+    debt = get_indicator('household_debt_gdp')
+    if debt:
+        affordability_components.append(debt.get('score', 50) * 0.3)
+    
+    # Mortgage stress (weight 30%)
+    stress = get_indicator('mortgage_stress_rate')
+    if stress:
+        affordability_components.append(stress.get('score', 50) * 0.3)
+    
+    affordability_score = sum(affordability_components) if affordability_components else 50
+    
+    # SUB-SCORE 2: SUPPLY/DEMAND BALANCE (0-100)
+    # Tight supply + strong demand = lower score (harder to buy)
+    supply_demand_components = []
+    
+    # Rental vacancy (weight 35%) - inverse
+    vacancy = get_indicator('rental_vacancy_rate')
+    if vacancy:
+        supply_demand_components.append(vacancy.get('score', 50) * 0.35)
+    
+    # Building approvals (weight 35%)
+    approvals = get_indicator('building_approvals')
+    if approvals:
+        supply_demand_components.append(approvals.get('score', 50) * 0.35)
+    
+    # Auction clearance (weight 30%)
+    clearance = get_indicator('auction_clearance_rate')
+    if clearance:
+        # Invert - high clearance = competitive = lower score
+        inv_score = 100 - clearance.get('score', 50)
+        supply_demand_components.append(inv_score * 0.3)
+    
+    supply_demand_score = sum(supply_demand_components) if supply_demand_components else 50
+    
+    # SUB-SCORE 3: FINANCIAL STRESS (0-100)
+    # Lower stress = higher score = better to buy
+    financial_stress_components = []
+    
+    # Unemployment (weight 40%)
+    unemployment = get_indicator('unemployment_rate')
+    if unemployment:
+        financial_stress_components.append(unemployment.get('score', 50) * 0.4)
+    
+    # Mortgage stress (weight 40%)
+    if stress:
+        financial_stress_components.append(stress.get('score', 50) * 0.4)
+    
+    # Credit growth (weight 20%)
+    credit = get_indicator('credit_growth')
+    if credit:
+        financial_stress_components.append(credit.get('score', 50) * 0.2)
+    
+    financial_stress_score = sum(financial_stress_components) if financial_stress_components else 50
+    
+    # SUB-SCORE 4: MARKET MOMENTUM (0-100)
+    # Based on trends across all indicators
+    momentum_components = []
+    trend_count = {'rising': 0, 'falling': 0, 'stable': 0}
+    
+    for ind_name, ind_data in indicator_scores.items():
+        trend = ind_data.get('trend', 'stable')
+        if trend != 'n/a':
+            trend_count[trend] += 1
+            
+            # For momentum, we want to know market direction
+            # Rising indicators split based on impact
+            config_impact = {
+                'interest_rate': 'inverse',
+                'household_debt_gdp': 'inverse',
+                'rental_vacancy_rate': 'inverse',
+                'mortgage_stress_rate': 'inverse',
+                'unemployment_rate': 'inverse',
+                'building_approvals': 'direct',
+                'auction_clearance_rate': 'direct',
+                'credit_growth': 'direct',
+                'wage_growth': 'direct'
+            }
+            
+            impact = config_impact.get(ind_name, 'direct')
+            
+            if impact == 'direct' and trend == 'rising':
+                momentum_components.append(70)  # Good momentum
+            elif impact == 'direct' and trend == 'falling':
+                momentum_components.append(30)  # Bad momentum
+            elif impact == 'inverse' and trend == 'falling':
+                momentum_components.append(70)  # Good momentum
+            elif impact == 'inverse' and trend == 'rising':
+                momentum_components.append(30)  # Bad momentum
+            else:
+                momentum_components.append(50)  # Stable
+    
+    momentum_score = np.mean(momentum_components) if momentum_components else 50
+    
+    return {
+        'affordability': round(affordability_score, 1),
+        'supply_demand': round(supply_demand_score, 1),
+        'financial_stress': round(financial_stress_score, 1),
+        'momentum': round(momentum_score, 1),
+        'trend_breakdown': trend_count
+    }
+
+
+def calculate_regional_divergence(conn):
+    """
+    Analyze divergence across different locations
+    Returns: dict with regional scores and recommendations
+    """
+    import psycopg2
+    is_pg = isinstance(conn, psycopg2.extensions.connection)
+    
+    cursor = conn.cursor()
+    
+    # Get all locations with recent data
+    if is_pg:
+        cursor.execute("""
+            SELECT DISTINCT location 
+            FROM property_data 
+            WHERE date >= CURRENT_DATE - INTERVAL '6 months'
+            ORDER BY location
+        """)
+    else:
+        cursor.execute("""
+            SELECT DISTINCT location 
+            FROM property_data 
+            WHERE date >= date('now', '-6 months')
+            ORDER BY location
+        """)
+    
+    locations = [row[0] for row in cursor.fetchall()]
+    
+    if len(locations) < 2:
+        return None
+    
+    location_scores = {}
+    
+    for location in locations:
+        # Calculate simple location score based on key metrics
+        metrics_to_check = ['median_price', 'rental_yield', 'vacancy_rate', 'days_on_market', 'annual_growth']
+        
+        location_data = {}
+        for metric in metrics_to_check:
+            if is_pg:
+                cursor.execute("""
+                    SELECT value FROM property_data 
+                    WHERE location = %s AND metric_name = %s 
+                    ORDER BY date DESC LIMIT 1
+                """, (location, metric))
+            else:
+                cursor.execute("""
+                    SELECT value FROM property_data 
+                    WHERE location = ? AND metric_name = ? 
+                    ORDER BY date DESC LIMIT 1
+                """, (location, metric))
+            
+            result = cursor.fetchone()
+            if result:
+                location_data[metric] = result[0]
+        
+        # Simple scoring: high yield + low vacancy + positive growth = good
+        score = 50
+        if 'rental_yield' in location_data and location_data['rental_yield'] > 4.5:
+            score += 15
+        if 'vacancy_rate' in location_data and location_data['vacancy_rate'] < 2.0:
+            score += 15
+        if 'annual_growth' in location_data and location_data['annual_growth'] > 5:
+            score += 20
+        
+        location_scores[location] = {
+            'score': min(100, score),
+            'data': location_data
+        }
+    
+    # Calculate divergence
+    scores_list = [v['score'] for v in location_scores.values()]
+    divergence = max(scores_list) - min(scores_list) if scores_list else 0
+    
+    # Rank locations
+    ranked = sorted(location_scores.items(), key=lambda x: x[1]['score'], reverse=True)
+    
+    return {
+        'locations': location_scores,
+        'divergence': divergence,
+        'ranked': ranked,
+        'recommendation': 'selective' if divergence > 30 else 'broad'
+    }
+
+
+def calculate_confidence_interval(base_score, data_completeness, volatility_scores):
+    """
+    Calculate confidence interval for the market score
+    Returns: (lower_bound, upper_bound, confidence_level)
+    """
+    # Base uncertainty from data completeness
+    data_uncertainty = (100 - data_completeness) / 10  # Max ±10 points
+    
+    # Add uncertainty from volatility
+    volatility_uncertainty = 0
+    for vol_level in volatility_scores.values():
+        if vol_level == 'extreme':
+            volatility_uncertainty += 3
+        elif vol_level == 'high':
+            volatility_uncertainty += 2
+        elif vol_level == 'moderate':
+            volatility_uncertainty += 1
+    
+    total_uncertainty = data_uncertainty + volatility_uncertainty
+    total_uncertainty = min(total_uncertainty, 20)  # Cap at ±20
+    
+    lower = max(0, base_score - total_uncertainty)
+    upper = min(100, base_score + total_uncertainty)
+    
+    # Confidence level
+    if total_uncertainty < 5:
+        confidence = 'High'
+    elif total_uncertainty < 10:
+        confidence = 'Medium'
+    else:
+        confidence = 'Low'
+    
+    return round(lower, 1), round(upper, 1), confidence
+
+
+def calculate_market_score_v3(conn=None):
+    """
+    Ultimate market score with Phase 2 & 3 enhancements
+    Returns: (score, signal, comprehensive_breakdown)
+    """
+    from datetime import datetime
+    import psycopg2
+    
+    if conn is None:
+        return 50, "No Connection", {}
+    
+    # First get the Phase 1 results
+    is_pg = isinstance(conn, psycopg2.extensions.connection)
+    cursor = conn.cursor()
+    
+    # Import the Phase 1 function (it's in the same file now)
+    from property_analysis_dashboard import calculate_market_score_v2
+    
+    # Get base calculation from Phase 1
+    base_score, base_signal, phase1_breakdown = calculate_market_score_v2(conn)
+    
+    indicator_scores = phase1_breakdown.get('indicator_scores', {})
+    
+    # PHASE 2: Calculate volatility for key indicators
+    volatility_analysis = {}
+    volatility_penalties = []
+    
+    key_indicators = ['interest_rate', 'household_debt_gdp', 'mortgage_stress_rate', 
+                     'rental_vacancy_rate', 'unemployment_rate']
+    
+    for indicator in key_indicators:
+        if indicator in indicator_scores:
+            penalty, std_dev, vol_level = calculate_volatility_penalty(conn, indicator, months=6)
+            volatility_analysis[indicator] = {
+                'penalty': penalty,
+                'std_dev': round(std_dev, 2),
+                'level': vol_level
+            }
+            volatility_penalties.append(penalty)
+    
+    # Apply volatility penalty
+    total_volatility_penalty = sum(volatility_penalties)
+    score_after_volatility = base_score + total_volatility_penalty
+    
+    # PHASE 2: Calculate sub-scores
+    sub_scores = calculate_sub_scores(conn, indicator_scores)
+    
+    # PHASE 2: Regional divergence analysis
+    regional_analysis = calculate_regional_divergence(conn)
+    
+    # PHASE 3: Calculate confidence interval
+    data_completeness = phase1_breakdown.get('data_completeness', 50)
+    vol_levels = {k: v['level'] for k, v in volatility_analysis.items()}
+    lower_bound, upper_bound, confidence_level = calculate_confidence_interval(
+        score_after_volatility, 
+        data_completeness, 
+        vol_levels
+    )
+    
+    # Final score with all adjustments
+    final_score = score_after_volatility
+    final_score = max(0, min(100, final_score))
+    
+    # Update signal based on confidence
+    if final_score >= 75:
+        signal = "🟢 Strong Buy"
+    elif final_score >= 60:
+        signal = "🟢 Buy"
+    elif final_score >= 50:
+        signal = "🟡 Moderate Buy"
+    elif final_score >= 40:
+        signal = "🟡 Hold"
+    elif final_score >= 30:
+        signal = "🟠 Caution"
+    else:
+        signal = "🔴 Wait"
+    
+    # Add confidence qualifier
+    if confidence_level == 'Low':
+        signal += " (Low Confidence)"
+    elif confidence_level == 'Medium':
+        signal += " (Medium Confidence)"
+    
+    # Comprehensive breakdown
+    comprehensive_breakdown = {
+        **phase1_breakdown,
+        'volatility_analysis': volatility_analysis,
+        'total_volatility_penalty': total_volatility_penalty,
+        'score_after_volatility': round(score_after_volatility, 1),
+        'sub_scores': sub_scores,
+        'regional_analysis': regional_analysis,
+        'confidence_interval': {
+            'lower': lower_bound,
+            'upper': upper_bound,
+            'level': confidence_level,
+            'range': round(upper_bound - lower_bound, 1)
+        },
+        'final_score_v3': round(final_score, 1)
+    }
+    
+    return final_score, signal, comprehensive_breakdown
+
+
+
 # Legacy wrapper for compatibility
 def calculate_market_score():
     """Wrapper for the enhanced v2 function for backward compatibility"""
@@ -1004,6 +1416,297 @@ def show_enhanced_market_score():
         4. **18.6 Year Cycle** - Adjusts conservatively at cycle peaks, aggressively at bottoms
         5. **Data Quality** - Lower confidence when <50% of indicators available
         """)
+
+
+"""
+Enhanced UI display for Phase 2 & 3 features
+"""
+
+def show_ultimate_market_analysis():
+    """Display the ultimate market analysis with all Phase 1, 2, 3 features"""
+    import streamlit as st
+    
+    st.header("🎯 Ultimate Market Score Analysis")
+    st.markdown("*Professional-grade scoring with volatility analysis, sub-scores, and confidence intervals*")
+    
+    conn = get_db_connection()
+    score, signal, breakdown = calculate_market_score_v3(conn)
+    conn.close()
+    
+    # ==================== MAIN SCORE DISPLAY ====================
+    st.markdown("### 📊 Overall Market Score")
+    
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+    
+    with col1:
+        confidence = breakdown.get('confidence_interval', {})
+        st.metric(
+            "Market Score", 
+            f"{breakdown.get('final_score_v3', score):.0f}/100",
+            delta=f"±{confidence.get('range', 0):.0f}"
+        )
+        st.caption(f"Confidence: {confidence.get('level', 'Unknown')}")
+    
+    with col2:
+        st.metric("Signal", signal.split('(')[0].strip())
+        if 'Low Confidence' in signal:
+            st.caption("⚠️ Low data confidence")
+        elif 'Medium Confidence' in signal:
+            st.caption("📊 Medium confidence")
+        else:
+            st.caption("✅ High confidence")
+    
+    with col3:
+        st.metric(
+            "Score Range", 
+            f"{confidence.get('lower', 0):.0f} - {confidence.get('upper', 100):.0f}"
+        )
+        st.caption("95% confidence interval")
+    
+    with col4:
+        cycle_pos = breakdown.get('cycle_position', 0)
+        st.metric("Cycle Position", f"Year {cycle_pos:.0f}/18.6")
+        cycle_mult = breakdown.get('cycle_multiplier', 1.0)
+        if cycle_mult < 1.0:
+            st.caption("⚠️ Late cycle caution")
+        elif cycle_mult > 1.0:
+            st.caption("✨ Early cycle boost")
+        else:
+            st.caption("📈 Mid cycle")
+    
+    # Progress bar for score
+    st.progress(min(1.0, breakdown.get('final_score_v3', score) / 100))
+    
+    st.markdown("---")
+    
+    # ==================== SUB-SCORES DASHBOARD ====================
+    st.markdown("### 🎯 Four Pillars Analysis")
+    st.markdown("*Breaking down the market into key dimensions*")
+    
+    sub_scores = breakdown.get('sub_scores', {})
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        afford_score = sub_scores.get('affordability', 50)
+        afford_color = "🟢" if afford_score >= 60 else "🟡" if afford_score >= 40 else "🔴"
+        st.metric(
+            f"{afford_color} Affordability",
+            f"{afford_score:.0f}/100"
+        )
+        st.caption("Interest + Debt + Stress")
+        st.progress(afford_score / 100)
+    
+    with col2:
+        supply_score = sub_scores.get('supply_demand', 50)
+        supply_color = "🟢" if supply_score >= 60 else "🟡" if supply_score >= 40 else "🔴"
+        st.metric(
+            f"{supply_color} Supply/Demand",
+            f"{supply_score:.0f}/100"
+        )
+        st.caption("Vacancy + Approvals + Clearance")
+        st.progress(supply_score / 100)
+    
+    with col3:
+        stress_score = sub_scores.get('financial_stress', 50)
+        stress_color = "🟢" if stress_score >= 60 else "🟡" if stress_score >= 40 else "🔴"
+        st.metric(
+            f"{stress_color} Financial Health",
+            f"{stress_score:.0f}/100"
+        )
+        st.caption("Unemployment + Stress + Credit")
+        st.progress(stress_score / 100)
+    
+    with col4:
+        momentum_score = sub_scores.get('momentum', 50)
+        momentum_color = "🟢" if momentum_score >= 60 else "🟡" if momentum_score >= 40 else "🔴"
+        st.metric(
+            f"{momentum_color} Market Momentum",
+            f"{momentum_score:.0f}/100"
+        )
+        trend_breakdown = sub_scores.get('trend_breakdown', {})
+        rising = trend_breakdown.get('rising', 0)
+        falling = trend_breakdown.get('falling', 0)
+        st.caption(f"📈 {rising} rising, 📉 {falling} falling")
+        st.progress(momentum_score / 100)
+    
+    st.markdown("---")
+    
+    # ==================== VOLATILITY ANALYSIS ====================
+    volatility_analysis = breakdown.get('volatility_analysis', {})
+    
+    if volatility_analysis:
+        st.markdown("### 📊 Market Volatility Analysis")
+        st.markdown("*Stability assessment over the past 6 months*")
+        
+        vol_penalty = breakdown.get('total_volatility_penalty', 0)
+        if vol_penalty < 0:
+            st.warning(f"⚠️ High volatility detected: {vol_penalty:.0f} point penalty applied")
+        else:
+            st.success("✅ Low volatility - stable market conditions")
+        
+        # Show volatility for each indicator
+        with st.expander("📈 Indicator Volatility Details", expanded=False):
+            for indicator, vol_data in volatility_analysis.items():
+                col1, col2, col3 = st.columns([3, 2, 2])
+                
+                with col1:
+                    friendly_name = indicator.replace('_', ' ').title()
+                    st.markdown(f"**{friendly_name}**")
+                
+                with col2:
+                    level = vol_data['level']
+                    if level == 'extreme':
+                        st.error(f"🔴 Extreme ({vol_data['penalty']} pts)")
+                    elif level == 'high':
+                        st.warning(f"🟡 High ({vol_data['penalty']} pts)")
+                    elif level == 'moderate':
+                        st.info(f"🔵 Moderate ({vol_data['penalty']} pts)")
+                    else:
+                        st.success(f"🟢 Low")
+                
+                with col3:
+                    st.caption(f"σ = {vol_data['std_dev']:.2f}")
+        
+        st.markdown("---")
+    
+    # ==================== REGIONAL ANALYSIS ====================
+    regional = breakdown.get('regional_analysis')
+    
+    if regional and regional is not None:
+        st.markdown("### 🗺️ Regional Market Divergence")
+        
+        divergence = regional.get('divergence', 0)
+        recommendation = regional.get('recommendation', 'broad')
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric("Market Divergence", f"{divergence:.0f} points")
+            if divergence > 30:
+                st.warning("⚠️ High divergence - markets moving independently")
+            elif divergence > 15:
+                st.info("📊 Moderate divergence - some regional variation")
+            else:
+                st.success("✅ Low divergence - markets moving together")
+        
+        with col2:
+            st.metric("Strategy", recommendation.upper())
+            if recommendation == 'selective':
+                st.info("💡 Be selective - target top-performing regions")
+            else:
+                st.info("💡 Broad strategy - most markets similar")
+        
+        # Location rankings
+        ranked = regional.get('ranked', [])
+        if ranked:
+            st.markdown("#### 🏆 Location Rankings")
+            
+            for i, (location, data) in enumerate(ranked[:5], 1):
+                col1, col2, col3 = st.columns([1, 3, 2])
+                
+                with col1:
+                    medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"#{i}"
+                    st.markdown(f"### {medal}")
+                
+                with col2:
+                    st.markdown(f"**{location}**")
+                    metrics = data.get('data', {})
+                    if 'rental_yield' in metrics:
+                        st.caption(f"Yield: {metrics['rental_yield']:.1f}%")
+                    if 'vacancy_rate' in metrics:
+                        st.caption(f"Vacancy: {metrics['vacancy_rate']:.1f}%")
+                
+                with col3:
+                    loc_score = data.get('score', 50)
+                    score_color = "🟢" if loc_score >= 70 else "🟡" if loc_score >= 50 else "🔴"
+                    st.metric(f"{score_color} Score", f"{loc_score:.0f}/100")
+        
+        st.markdown("---")
+    
+    # ==================== RISK WARNINGS ====================
+    risk_warnings = breakdown.get('risk_warnings', [])
+    
+    if risk_warnings:
+        st.markdown("### ⚠️ Market Alerts & Opportunities")
+        for warning in risk_warnings:
+            if "OPPORTUNITY" in warning or "✨" in warning:
+                st.success(warning)
+            elif "CRISIS" in warning or "STORM" in warning or "🚨" in warning:
+                st.error(warning)
+            else:
+                st.warning(warning)
+        st.markdown("---")
+    
+    # ==================== DETAILED BREAKDOWN ====================
+    with st.expander("🔬 Complete Technical Breakdown", expanded=False):
+        st.markdown("### Score Calculation Flow")
+        
+        st.code(f"""
+Phase 1: Weighted Indicators
+→ Base Score: {breakdown.get('base_score', 50):.1f}/100
+  
+Phase 2: Volatility Adjustment  
+→ Volatility Penalty: {breakdown.get('total_volatility_penalty', 0):.1f} points
+→ Score After Volatility: {breakdown.get('score_after_volatility', 50):.1f}/100
+
+Phase 3: Cycle Adjustment
+→ Cycle Multiplier: ×{breakdown.get('cycle_multiplier', 1.0):.2f} (Year {breakdown.get('cycle_position', 0):.0f}/18.6)
+→ FINAL SCORE: {breakdown.get('final_score_v3', 50):.1f}/100
+
+Confidence Interval: [{confidence.get('lower', 0):.0f}, {confidence.get('upper', 100):.0f}]
+Confidence Level: {confidence.get('level', 'Unknown')}
+        """)
+        
+        st.markdown("### Individual Indicator Scores")
+        
+        indicator_scores = breakdown.get('indicator_scores', {})
+        sorted_indicators = sorted(
+            indicator_scores.items(),
+            key=lambda x: x[1]['weight'],
+            reverse=True
+        )
+        
+        for indicator_name, details in sorted_indicators:
+            col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+            
+            with col1:
+                st.markdown(f"**{details['description']}**")
+                st.caption(f"Current: {details['value']:.2f}")
+            
+            with col2:
+                score_with_trend = details['score'] + details['trend_bonus']
+                score_color = "🟢" if score_with_trend >= 70 else "🟡" if score_with_trend >= 40 else "🔴"
+                st.markdown(f"{score_color} {score_with_trend:.0f}/100")
+            
+            with col3:
+                if details['trend'] != 'n/a':
+                    trend_icon = "📈" if details['trend'] == 'rising' else "📉" if details['trend'] == 'falling' else "➡️"
+                    st.markdown(f"{trend_icon} {details['trend'].title()}")
+                    if details['trend_change'] != 0:
+                        st.caption(f"{details['trend_change']:+.1f}%")
+            
+            with col4:
+                st.caption(f"W: {details['weight']}")
+        
+        st.markdown("### 📚 Methodology")
+        st.markdown("""
+        **Phase 1 - Weighted Indicators:**
+        - 9 economic indicators with professional weightings (5-30 points each)
+        - Trend analysis adds ±10 bonus based on 3-month momentum
+        - Composite risk detection for extreme scenarios
+        
+        **Phase 2 - Volatility & Sub-Scores:**
+        - Volatility penalty based on 6-month standard deviation
+        - Four sub-scores: Affordability, Supply/Demand, Financial Stress, Momentum
+        - Regional divergence analysis for multi-location portfolios
+        
+        **Phase 3 - Confidence & Precision:**
+        - Confidence interval based on data completeness + volatility
+        - 18.6-year cycle adjustment (currently Year {:.0f})
+        - Final score represents true market conditions with uncertainty bounds
+        """.format(breakdown.get('cycle_position', 0)))
+
 
 
 def show_economic_indicators():
@@ -2273,5 +2976,8 @@ Please analyze this data and provide insights on:
         
         conn.close()
 
+    elif page == "Ultimate Analysis":
+        show_ultimate_market_analysis()
+    
 if __name__ == "__main__":
     main()
