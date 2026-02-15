@@ -166,8 +166,8 @@ def get_indicator_data(indicator_name, days=365):
     query = """
         SELECT date, value 
         FROM economic_indicators 
-        WHERE indicator_name = ? 
-        AND date >= date('now', '-{} days')
+        WHERE indicator_name = %s 
+        AND date >= CURRENT_DATE - INTERVAL '{} days'
         ORDER BY date
     """.format(days)
     df = pd.read_sql_query(query, conn, params=(indicator_name,))
@@ -199,7 +199,7 @@ def calculate_market_score():
     for indicator, config in indicators_config.items():
         cursor.execute("""
             SELECT value FROM economic_indicators 
-            WHERE indicator_name = ? 
+            WHERE indicator_name = %s 
             ORDER BY date DESC LIMIT 1
         """, (indicator,))
         result = cursor.fetchone()
@@ -350,7 +350,7 @@ def show_dashboard():
         """Get latest value and calculate change for an indicator"""
         cursor.execute("""
             SELECT value, date FROM economic_indicators 
-            WHERE indicator_name = ? 
+            WHERE indicator_name = %s 
             ORDER BY date DESC LIMIT 2
         """, (indicator_name,))
         results = cursor.fetchall()
@@ -547,7 +547,7 @@ Based on the available data, the Australian property market shows mixed signals:
             if st.button("💾 Save", type="primary", key="save_commentary"):
                 cursor_comment.execute("""
                     INSERT OR REPLACE INTO market_commentary (id, commentary, updated_date)
-                    VALUES (1, ?, date('now'))
+                    VALUES (1, %s, date('now'))
                 """, (new_commentary,))
                 conn_comment.commit()
                 st.success("✅ Commentary saved!")
@@ -557,7 +557,7 @@ Based on the available data, the Australian property market shows mixed signals:
             if st.button("🔄 Reset to Default", key="reset_commentary"):
                 cursor_comment.execute("""
                     INSERT OR REPLACE INTO market_commentary (id, commentary, updated_date)
-                    VALUES (1, ?, date('now'))
+                    VALUES (1, %s, date('now'))
                 """, (default_commentary,))
                 conn_comment.commit()
                 st.success("✅ Reset to default!")
@@ -589,7 +589,7 @@ def show_economic_indicators():
     def get_indicator_value(indicator_name):
         cursor.execute("""
             SELECT value FROM economic_indicators 
-            WHERE indicator_name = ? 
+            WHERE indicator_name = %s 
             ORDER BY date DESC LIMIT 1
         """, (indicator_name,))
         result = cursor.fetchone()
@@ -773,7 +773,7 @@ def show_economic_indicators():
         query = """
             SELECT date, value 
             FROM economic_indicators 
-            WHERE indicator_name = ? 
+            WHERE indicator_name = %s 
             ORDER BY date
         """
         df = pd.read_sql_query(query, conn, params=(indicator_name,))
@@ -896,7 +896,7 @@ def show_location_analysis():
     def get_latest_metric(location, metric_name):
         cursor.execute("""
             SELECT value FROM property_data 
-            WHERE location = ? AND metric_name = ?
+            WHERE location = %s AND metric_name = ?
             ORDER BY date DESC LIMIT 1
         """, (location, metric_name))
         result = cursor.fetchone()
@@ -1009,7 +1009,7 @@ def show_location_analysis():
     query = """
         SELECT date, location, value 
         FROM property_data 
-        WHERE location IN (?, ?) 
+        WHERE location IN (?, %s) 
         AND metric_name = 'median_price'
         AND date >= date('now', '-12 months')
         ORDER BY date
@@ -1252,7 +1252,7 @@ def show_data_management():
                     cursor = conn.cursor()
                     cursor.execute("""
                         INSERT OR REPLACE INTO economic_indicators (date, indicator_name, value, source)
-                        VALUES (?, ?, ?, ?)
+                        VALUES (%s, %s, ?, %s)
                     """, (date, indicator_name, value, source))
                     conn.commit()
                     conn.close()
@@ -1312,7 +1312,7 @@ def show_data_management():
                     cursor = conn.cursor()
                     cursor.execute("""
                         INSERT OR REPLACE INTO property_data (date, location, metric_name, value, source)
-                        VALUES (?, ?, ?, ?, ?)
+                        VALUES (%s, %s, ?, %s, %s)
                     """, (date, location, metric_name, value, source))
                     conn.commit()
                     conn.close()
@@ -1383,7 +1383,7 @@ def show_data_management():
                     
                     # Get the full record
                     cursor = conn.cursor()
-                    cursor.execute("SELECT * FROM economic_indicators WHERE id = ?", (selected_id,))
+                    cursor.execute("SELECT * FROM economic_indicators WHERE id = %s", (selected_id,))
                     record = cursor.fetchone()
                     
                     if record:
@@ -1450,7 +1450,7 @@ def show_data_management():
                                     cursor.execute("""
                                         UPDATE economic_indicators 
                                         SET date = ?, indicator_name = ?, value = ?, source = ?
-                                        WHERE id = ?
+                                        WHERE id = %s
                                     """, (new_date, new_indicator, new_value, new_source, selected_id))
                                     conn.commit()
                                     st.success(f"✅ Updated {new_indicator} for {new_date}")
@@ -1462,7 +1462,7 @@ def show_data_management():
                             
                             if st.button("🗑️ Delete Entry", type="secondary", key="delete_eco"):
                                 try:
-                                    cursor.execute("DELETE FROM economic_indicators WHERE id = ?", (selected_id,))
+                                    cursor.execute("DELETE FROM economic_indicators WHERE id = %s", (selected_id,))
                                     conn.commit()
                                     st.success(f"✅ Deleted entry")
                                     st.rerun()
@@ -1503,7 +1503,7 @@ def show_data_management():
                     
                     # Get the full record
                     cursor = conn.cursor()
-                    cursor.execute("SELECT * FROM property_data WHERE id = ?", (selected_id,))
+                    cursor.execute("SELECT * FROM property_data WHERE id = %s", (selected_id,))
                     record = cursor.fetchone()
                     
                     if record:
@@ -1562,7 +1562,7 @@ def show_data_management():
                                     cursor.execute("""
                                         UPDATE property_data 
                                         SET date = ?, location = ?, metric_name = ?, value = ?, source = ?
-                                        WHERE id = ?
+                                        WHERE id = %s
                                     """, (new_date, new_location, new_metric, new_value, new_source, selected_id))
                                     conn.commit()
                                     st.success(f"✅ Updated {new_location} - {new_metric} for {new_date}")
@@ -1574,7 +1574,7 @@ def show_data_management():
                             
                             if st.button("🗑️ Delete Entry", type="secondary", key="delete_prop"):
                                 try:
-                                    cursor.execute("DELETE FROM property_data WHERE id = ?", (selected_id,))
+                                    cursor.execute("DELETE FROM property_data WHERE id = %s", (selected_id,))
                                     conn.commit()
                                     st.success(f"✅ Deleted entry")
                                     st.rerun()
@@ -1840,3 +1840,4 @@ Please analyze this data and provide insights on:
 
 if __name__ == "__main__":
     main()
+
