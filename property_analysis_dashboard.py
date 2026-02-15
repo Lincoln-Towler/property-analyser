@@ -1030,6 +1030,8 @@ def main():
         show_anderson_tracker()
     elif page == "Data Management":
         show_data_management()
+    elif page == "Ultimate Analysis":
+        show_ultimate_market_analysis()
 
 def show_dashboard():
     """Main dashboard view with overall market assessment"""
@@ -2976,8 +2978,6 @@ Please analyze this data and provide insights on:
         
         conn.close()
 
-    elif page == "Ultimate Analysis":
-        show_ultimate_market_analysis()
     
 if __name__ == "__main__":
     main()
