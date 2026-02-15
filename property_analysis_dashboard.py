@@ -546,8 +546,7 @@ Based on the available data, the Australian property market shows mixed signals:
         with col1:
             if st.button("💾 Save", type="primary", key="save_commentary"):
                 cursor_comment.execute("""
-                    INSERT OR REPLACE INTO market_commentary (id, commentary, updated_date)
-                    VALUES (1, %s, CURRENT_DATE)
+                    INSERT INTO market_commentary (id, commentary, updated_date) VALUES (1, %s, CURRENT_DATE) ON CONFLICT (id) DO UPDATE SET commentary = EXCLUDED.commentary, updated_date = EXCLUDED.updated_date
                 """, (new_commentary,))
                 conn_comment.commit()
                 st.success("✅ Commentary saved!")
@@ -556,8 +555,7 @@ Based on the available data, the Australian property market shows mixed signals:
         with col2:
             if st.button("🔄 Reset to Default", key="reset_commentary"):
                 cursor_comment.execute("""
-                    INSERT OR REPLACE INTO market_commentary (id, commentary, updated_date)
-                    VALUES (1, %s, CURRENT_DATE)
+                    INSERT INTO market_commentary (id, commentary, updated_date) VALUES (1, %s, CURRENT_DATE) ON CONFLICT (id) DO UPDATE SET commentary = EXCLUDED.commentary, updated_date = EXCLUDED.updated_date
                 """, (default_commentary,))
                 conn_comment.commit()
                 st.success("✅ Reset to default!")
@@ -896,7 +894,7 @@ def show_location_analysis():
     def get_latest_metric(location, metric_name):
         cursor.execute("""
             SELECT value FROM property_data 
-            WHERE location = %s AND metric_name = ?
+            WHERE location = %s AND metric_name = %s
             ORDER BY date DESC LIMIT 1
         """, (location, metric_name))
         result = cursor.fetchone()
@@ -1009,7 +1007,7 @@ def show_location_analysis():
     query = """
         SELECT date, location, value 
         FROM property_data 
-        WHERE location IN (?, %s) 
+        WHERE location IN (%s, %s) 
         AND metric_name = 'median_price'
         AND date >= CURRENT_DATE - INTERVAL '12 months'
         ORDER BY date
@@ -1251,8 +1249,9 @@ def show_data_management():
                     conn = get_db_connection()
                     cursor = conn.cursor()
                     cursor.execute("""
-                        INSERT OR REPLACE INTO economic_indicators (date, indicator_name, value, source)
-                        VALUES (%s, %s, ?, %s)
+                        INSERT INTO economic_indicators (date, indicator_name, value, source)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (date, indicator_name) DO UPDATE SET value = EXCLUDED.value, source = EXCLUDED.source
                     """, (date, indicator_name, value, source))
                     conn.commit()
                     conn.close()
@@ -1311,8 +1310,9 @@ def show_data_management():
                     conn = get_db_connection()
                     cursor = conn.cursor()
                     cursor.execute("""
-                        INSERT OR REPLACE INTO property_data (date, location, metric_name, value, source)
-                        VALUES (%s, %s, ?, %s, %s)
+                        INSERT INTO property_data (date, location, metric_name, value, source)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (date, location, metric_name) DO UPDATE SET value = EXCLUDED.value, source = EXCLUDED.source
                     """, (date, location, metric_name, value, source))
                     conn.commit()
                     conn.close()
@@ -1449,7 +1449,7 @@ def show_data_management():
                                 try:
                                     cursor.execute("""
                                         UPDATE economic_indicators 
-                                        SET date = ?, indicator_name = ?, value = ?, source = ?
+                                        SET date = %s, indicator_name = %s, value = %s, source = %s
                                         WHERE id = %s
                                     """, (new_date, new_indicator, new_value, new_source, selected_id))
                                     conn.commit()
@@ -1561,7 +1561,7 @@ def show_data_management():
                                 try:
                                     cursor.execute("""
                                         UPDATE property_data 
-                                        SET date = ?, location = ?, metric_name = ?, value = ?, source = ?
+                                        SET date = %s, location = %s, metric_name = %s, value = %s, source = %s
                                         WHERE id = %s
                                     """, (new_date, new_location, new_metric, new_value, new_source, selected_id))
                                     conn.commit()
