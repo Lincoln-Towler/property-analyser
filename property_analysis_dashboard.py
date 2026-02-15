@@ -23,33 +23,28 @@ import json
 import sqlite3
 from pathlib import Path
 
-# Database connection helper
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
 def get_db_connection():
-    """Get database connection - works with both local SQLite and Turso"""
+    """Get database connection - works with both local SQLite and Supabase PostgreSQL"""
     try:
-        # Try Turso connection (for deployed app)
-        if "turso" in st.secrets:
-            url = st.secrets["turso"]["database_url"]
-            auth_token = st.secrets["turso"]["auth_token"]
-            
-            # Use libsql_client for Turso
-            try:
-                import libsql_client
-                # Create a sync client that works like sqlite3
-                client = libsql_client.create_client_sync(
-                    url=url,
-                    auth_token=auth_token
-                )
-                return client
-            except ImportError:
-                st.error("libsql_client not installed. Run: pip install libsql-client")
-                st.stop()
+        # Try Supabase connection (for deployed app)
+        if "supabase" in st.secrets:
+            conn_string = st.secrets["supabase"]["connection_string"]
+            conn = psycopg2.connect(conn_string)
+            return conn
         else:
             # Local development - use regular SQLite
             return sqlite3.connect("property_data.db")
     except Exception as e:
         # Fallback to local SQLite
+        st.warning(f"Could not connect to Supabase: {e}. Using local SQLite.")
         return sqlite3.connect("property_data.db")
+
+def is_postgres(conn):
+    """Check if connection is PostgreSQL"""
+    return isinstance(conn, psycopg2.extensions.connection)
 
 # Page configuration
 st.set_page_config(
@@ -99,46 +94,66 @@ st.markdown("""
 DB_PATH = Path("property_data.db")
 
 def init_database():
-    """Initialize SQLite database with required tables"""
+    """Initialize database with required tables - works with both SQLite and PostgreSQL"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # Check if we're using PostgreSQL
+    is_pg = is_postgres(conn)
+    
+    # Use appropriate syntax for PRIMARY KEY
+    if is_pg:
+        pk_type = "SERIAL PRIMARY KEY"
+        timestamp_type = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+    else:
+        pk_type = "INTEGER PRIMARY KEY AUTOINCREMENT"
+        timestamp_type = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+    
     # Economic indicators table
-    cursor.execute("""
+    cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS economic_indicators (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {pk_type},
             date DATE NOT NULL,
             indicator_name TEXT NOT NULL,
             value REAL NOT NULL,
             source TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at {timestamp_type},
             UNIQUE(date, indicator_name)
         )
     """)
     
     # Property market data table
-    cursor.execute("""
+    cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS property_data (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {pk_type},
             date DATE NOT NULL,
             location TEXT NOT NULL,
             metric_name TEXT NOT NULL,
             value REAL NOT NULL,
             source TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at {timestamp_type},
             UNIQUE(date, location, metric_name)
         )
     """)
     
     # Market sentiment table
-    cursor.execute("""
+    cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS market_sentiment (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {pk_type},
             date DATE NOT NULL,
             source TEXT NOT NULL,
             sentiment_score REAL,
             notes TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at {timestamp_type}
+        )
+    """)
+    
+    # Market commentary table
+    cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS market_commentary (
+            id INTEGER PRIMARY KEY,
+            commentary TEXT,
+            updated_date DATE
         )
     """)
     
