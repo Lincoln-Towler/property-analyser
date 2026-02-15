@@ -29,16 +29,20 @@ def get_db_connection():
     try:
         # Try Turso connection (for deployed app)
         if "turso" in st.secrets:
-            import urllib.request
             url = st.secrets["turso"]["database_url"]
             auth_token = st.secrets["turso"]["auth_token"]
             
-            # Use libsql-experimental for Turso
+            # Use libsql_client for Turso
             try:
-                from libsql_experimental import dbapi2 as libsql
-                return libsql.connect(database=url, auth_token=auth_token)
+                import libsql_client
+                # Create a sync client that works like sqlite3
+                client = libsql_client.create_client_sync(
+                    url=url,
+                    auth_token=auth_token
+                )
+                return client
             except ImportError:
-                st.error("libsql_experimental not installed. Run: pip install libsql-experimental")
+                st.error("libsql_client not installed. Run: pip install libsql-client")
                 st.stop()
         else:
             # Local development - use regular SQLite
