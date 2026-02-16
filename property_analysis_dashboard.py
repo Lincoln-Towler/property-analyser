@@ -2536,7 +2536,9 @@ def show_data_management():
                     
                     success_count = 0
                     error_count = 0
+                    skipped_count = 0
                     errors = []
+                    skipped = []
                     
                     if data_type_csv == "Economic Indicators":
                         # Validate columns
@@ -2545,17 +2547,26 @@ def show_data_management():
                             st.error(f"CSV must have columns: {required_cols}")
                         else:
                             for idx, row in df.iterrows():
+                                # Skip rows with missing required fields
+                                if pd.isna(row['date']) or pd.isna(row['indicator_name']) or pd.isna(row['value']):
+                                    skipped_count += 1
+                                    skipped.append(f"Row {idx + 2}: Missing required field(s)")
+                                    continue
+                                
                                 try:
+                                    # Use default source if missing
+                                    source = row['source'] if pd.notna(row['source']) else 'CSV Import'
+                                    
                                     cursor.execute("""
                                         INSERT INTO economic_indicators (date, indicator_name, value, source)
                                         VALUES (%s, %s, %s, %s)
                                         ON CONFLICT (date, indicator_name) 
                                         DO UPDATE SET value = EXCLUDED.value, source = EXCLUDED.source
-                                    """, (row['date'], row['indicator_name'], float(row['value']), row['source']))
+                                    """, (row['date'], row['indicator_name'], float(row['value']), source))
                                     success_count += 1
                                 except Exception as e:
                                     error_count += 1
-                                    errors.append(f"Row {idx + 1}: {str(e)}")
+                                    errors.append(f"Row {idx + 2}: {str(e)}")
                             
                             conn.commit()
                             
@@ -2566,29 +2577,57 @@ def show_data_management():
                             st.error(f"CSV must have columns: {required_cols}")
                         else:
                             for idx, row in df.iterrows():
+                                # Skip rows with missing required fields
+                                if pd.isna(row['date']) or pd.isna(row['location']) or pd.isna(row['metric_name']) or pd.isna(row['value']):
+                                    skipped_count += 1
+                                    skipped.append(f"Row {idx + 2}: Missing required field(s)")
+                                    continue
+                                
                                 try:
+                                    # Use default source if missing
+                                    source = row['source'] if pd.notna(row['source']) else 'CSV Import'
+                                    
                                     cursor.execute("""
                                         INSERT INTO property_data (date, location, metric_name, value, source)
                                         VALUES (%s, %s, %s, %s, %s)
                                         ON CONFLICT (date, location, metric_name) 
                                         DO UPDATE SET value = EXCLUDED.value, source = EXCLUDED.source
-                                    """, (row['date'], row['location'], row['metric_name'], float(row['value']), row['source']))
+                                    """, (row['date'], row['location'], row['metric_name'], float(row['value']), source))
                                     success_count += 1
                                 except Exception as e:
                                     error_count += 1
-                                    errors.append(f"Row {idx + 1}: {str(e)}")
+                                    errors.append(f"Row {idx + 2}: {str(e)}")
                             
                             conn.commit()
                     
                     conn.close()
                     
                     # Show results
-                    if success_count > 0:
-                        st.success(f"✅ Successfully imported {success_count} rows!")
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        if success_count > 0:
+                            st.success(f"✅ Imported: {success_count}")
+                    
+                    with col2:
+                        if skipped_count > 0:
+                            st.info(f"⏭️ Skipped: {skipped_count}")
+                    
+                    with col3:
+                        if error_count > 0:
+                            st.warning(f"⚠️ Failed: {error_count}")
+                    
+                    # Detailed messages
+                    if skipped_count > 0:
+                        with st.expander(f"📋 View {skipped_count} skipped rows (missing data)"):
+                            st.markdown("*These rows were skipped because they had empty/missing required fields:*")
+                            for skip in skipped[:20]:  # Show first 20 skipped
+                                st.text(skip)
+                            if len(skipped) > 20:
+                                st.text(f"... and {len(skipped) - 20} more")
                     
                     if error_count > 0:
-                        st.warning(f"⚠️ {error_count} rows failed to import")
-                        with st.expander("Show errors"):
+                        with st.expander(f"❌ View {error_count} errors"):
                             for error in errors[:10]:  # Show first 10 errors
                                 st.text(error)
                     
