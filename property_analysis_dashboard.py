@@ -2411,7 +2411,12 @@ def show_data_management():
                         "wage_growth",
                     ]
                 )
-                value = st.number_input("Value", min_value=0.0, step=0.1)
+                
+                # Allow negative values for growth indicators (can be negative)
+                if indicator_name in ["credit_growth", "wage_growth"]:
+                    value = st.number_input("Value (%)", step=0.1, format="%.2f", help="Can be negative (e.g., -0.5 for 0.5% decline)")
+                else:
+                    value = st.number_input("Value", min_value=0.0, step=0.1)
             
             with col2:
                 date = st.date_input("Date", value=datetime.now())
@@ -2472,7 +2477,12 @@ def show_data_management():
                         "sales_volume",
                     ]
                 )
-                value = st.number_input("Value", min_value=0.0, step=0.1, key="property_value_input")
+                
+                # Allow negative values for annual_growth (can be negative during downturns)
+                if metric_name == "annual_growth":
+                    value = st.number_input("Value (%)", step=0.1, format="%.2f", key="property_value_input", help="Can be negative (e.g., -5.2 for 5.2% decline)")
+                else:
+                    value = st.number_input("Value", min_value=0.0, step=0.1, key="property_value_input")
             
             with col2:
                 date = st.date_input("Date", value=datetime.now())
