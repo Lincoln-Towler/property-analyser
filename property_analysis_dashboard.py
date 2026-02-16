@@ -1007,13 +1007,16 @@ def main():
         st.header("Navigation")
         page = st.radio(
             "Select View",
-            ["Dashboard", "Economic Indicators", "Location Analysis", "Anderson Cycle Tracker", "Data Management"]
+            ["Dashboard", "Ultimate Analysis", "Economic Indicators", "Location Analysis", "Anderson Cycle Tracker", "Data Management"]
         )
         
         st.markdown("---")
         st.markdown("### Quick Stats")
-        score, signal = calculate_market_score()
-        st.metric("Market Score", f"{score:.0f}/100", signal)
+        conn_quick = get_db_connection()
+        score, signal, _ = calculate_market_score_v3(conn_quick)
+        conn_quick.close()
+        signal_clean = signal.split('(')[0].strip()
+        st.metric("Market Score", f"{score:.0f}/100", signal_clean)
         
         st.markdown("---")
         st.markdown("### Last Updated")
