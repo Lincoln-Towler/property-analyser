@@ -177,14 +177,6 @@ def get_indicator_data(indicator_name, days=365):
 
 
 
-"""
-Enhanced Market Score Calculation with Phase 1 Improvements:
-- Weighted indicator system
-- Trend analysis (3-month momentum)
-- 18.6 year cycle position adjustment
-- Composite risk conditions
-"""
-
 def get_indicator_trend(conn, indicator_name, months=3):
     """
     Calculate trend direction for an indicator over the last N months
@@ -573,15 +565,6 @@ def calculate_market_score_v2(conn=None):
     return final_score, signal, breakdown
 
 
-
-"""
-Phase 2 & 3 Enhancements for Property Analysis Dashboard
-- Additional critical indicators
-- Sub-score breakdown
-- Volatility analysis
-- Confidence intervals
-- Regional divergence analysis
-"""
 
 import numpy as np
 from datetime import datetime, timedelta
@@ -1450,10 +1433,6 @@ def show_enhanced_market_score():
         5. **Data Quality** - Lower confidence when <50% of indicators available
         """)
 
-
-"""
-Enhanced UI display for Phase 2 & 3 features
-"""
 
 def show_ultimate_market_analysis():
     """Display the ultimate market analysis with all Phase 1, 2, 3 features"""
