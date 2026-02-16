@@ -177,14 +177,6 @@ def get_indicator_data(indicator_name, days=365):
 
 
 
-"""
-Enhanced Market Score Calculation with Phase 1 Improvements:
-- Weighted indicator system
-- Trend analysis (3-month momentum)
-- 18.6 year cycle position adjustment
-- Composite risk conditions
-"""
-
 def get_indicator_trend(conn, indicator_name, months=3):
     """
     Calculate trend direction for an indicator over the last N months
@@ -573,15 +565,6 @@ def calculate_market_score_v2(conn=None):
     return final_score, signal, breakdown
 
 
-
-"""
-Phase 2 & 3 Enhancements for Property Analysis Dashboard
-- Additional critical indicators
-- Sub-score breakdown
-- Volatility analysis
-- Confidence intervals
-- Regional divergence analysis
-"""
 
 import numpy as np
 from datetime import datetime, timedelta
@@ -1038,8 +1021,6 @@ def main():
 
 def show_dashboard():
     """Main dashboard view with overall market assessment"""
-    st.header("Market Overview Dashboard")
-    
     # Overall market score with Phase 1/2/3 enhancements
     conn_score = get_db_connection()
     score, signal, breakdown = calculate_market_score_v3(conn_score)
@@ -1453,16 +1434,9 @@ def show_enhanced_market_score():
         """)
 
 
-"""
-Enhanced UI display for Phase 2 & 3 features
-"""
-
 def show_ultimate_market_analysis():
     """Display the ultimate market analysis with all Phase 1, 2, 3 features"""
     import streamlit as st
-    
-    st.header("🎯 Ultimate Market Score Analysis")
-    st.markdown("*Professional-grade scoring with volatility analysis, sub-scores, and confidence intervals*")
     
     conn = get_db_connection()
     score, signal, breakdown = calculate_market_score_v3(conn)
@@ -1746,10 +1720,8 @@ Confidence Level: {confidence.get('level', 'Unknown')}
 
 def show_economic_indicators():
     """Detailed view of economic indicators"""
-    st.header("Economic Indicators")
-    
     st.markdown("""
-    Track key economic metrics that influence property markets. 
+    Track key economic metrics that influence property markets.
     **Red** indicators suggest increased crash risk, **Green** indicators suggest growth support.
     """)
     
@@ -2025,8 +1997,6 @@ def show_economic_indicators():
 
 def show_location_analysis():
     """Compare different locations for investment"""
-    st.header("Location Analysis & Comparison")
-    
     st.markdown("Compare property markets across different Australian cities and regions.")
     
     # Get available locations from database
@@ -2232,8 +2202,6 @@ def show_location_analysis():
 
 def show_anderson_tracker():
     """Track position in the 18.6 year property cycle"""
-    st.header("Phillip Anderson 18.6 Year Cycle Tracker")
-    
     st.markdown("""
     This tracker helps you understand where we are in the 18.6-year real estate cycle according to Phillip Anderson's theory.
     """)
@@ -2376,8 +2344,6 @@ def show_anderson_tracker():
 
 def show_data_management():
     """Manage and input data into the system"""
-    st.header("Data Management")
-    
     st.markdown("Add, edit, or import data to keep your analysis current.")
     
     tab1, tab2, tab3, tab4 = st.tabs(["Manual Entry", "CSV Import", "View/Edit Data", "📥 Export Data"])
