@@ -2514,16 +2514,88 @@ def show_data_management():
         **Property Data:** date, location, metric_name, value, source
         """)
         
+        data_type_csv = st.radio(
+            "CSV Data Type",
+            ["Economic Indicators", "Property Data"],
+            horizontal=True
+        )
+        
         uploaded_file = st.file_uploader("Choose CSV file", type="csv")
         
         if uploaded_file is not None:
             try:
                 df = pd.read_csv(uploaded_file)
-                st.dataframe(df.head())
+                st.markdown("### Preview:")
+                st.dataframe(df.head(10))
                 
-                if st.button("Import Data"):
-                    # Logic to import would go here
-                    st.success(f"Imported {len(df)} rows successfully")
+                st.markdown(f"**Total rows:** {len(df)}")
+                
+                if st.button("✅ Import Data to Database", type="primary"):
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    
+                    success_count = 0
+                    error_count = 0
+                    errors = []
+                    
+                    if data_type_csv == "Economic Indicators":
+                        # Validate columns
+                        required_cols = ['date', 'indicator_name', 'value', 'source']
+                        if not all(col in df.columns for col in required_cols):
+                            st.error(f"CSV must have columns: {required_cols}")
+                        else:
+                            for idx, row in df.iterrows():
+                                try:
+                                    cursor.execute("""
+                                        INSERT INTO economic_indicators (date, indicator_name, value, source)
+                                        VALUES (%s, %s, %s, %s)
+                                        ON CONFLICT (date, indicator_name) 
+                                        DO UPDATE SET value = EXCLUDED.value, source = EXCLUDED.source
+                                    """, (row['date'], row['indicator_name'], float(row['value']), row['source']))
+                                    success_count += 1
+                                except Exception as e:
+                                    error_count += 1
+                                    errors.append(f"Row {idx + 1}: {str(e)}")
+                            
+                            conn.commit()
+                            
+                    elif data_type_csv == "Property Data":
+                        # Validate columns
+                        required_cols = ['date', 'location', 'metric_name', 'value', 'source']
+                        if not all(col in df.columns for col in required_cols):
+                            st.error(f"CSV must have columns: {required_cols}")
+                        else:
+                            for idx, row in df.iterrows():
+                                try:
+                                    cursor.execute("""
+                                        INSERT INTO property_data (date, location, metric_name, value, source)
+                                        VALUES (%s, %s, %s, %s, %s)
+                                        ON CONFLICT (date, location, metric_name) 
+                                        DO UPDATE SET value = EXCLUDED.value, source = EXCLUDED.source
+                                    """, (row['date'], row['location'], row['metric_name'], float(row['value']), row['source']))
+                                    success_count += 1
+                                except Exception as e:
+                                    error_count += 1
+                                    errors.append(f"Row {idx + 1}: {str(e)}")
+                            
+                            conn.commit()
+                    
+                    conn.close()
+                    
+                    # Show results
+                    if success_count > 0:
+                        st.success(f"✅ Successfully imported {success_count} rows!")
+                    
+                    if error_count > 0:
+                        st.warning(f"⚠️ {error_count} rows failed to import")
+                        with st.expander("Show errors"):
+                            for error in errors[:10]:  # Show first 10 errors
+                                st.text(error)
+                    
+                    if success_count > 0:
+                        st.info("💡 Go to 'Location Analysis' to see your data!")
+                        st.balloons()
+                        
             except Exception as e:
                 st.error(f"Error reading file: {e}")
     
