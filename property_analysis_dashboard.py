@@ -883,16 +883,19 @@ def calculate_market_score_v3(conn=None):
     
     # Get base calculation from Phase 1
     base_score, base_signal, phase1_breakdown = calculate_market_score_v2(conn)
-    
+
+    # Use the pre-cycle base score from v2's breakdown (not the returned final which includes cycle)
+    true_base_score = phase1_breakdown.get('base_score', base_score)
+
     indicator_scores = phase1_breakdown.get('indicator_scores', {})
-    
+
     # PHASE 2: Calculate volatility for key indicators
     volatility_analysis = {}
     volatility_penalties = []
-    
-    key_indicators = ['interest_rate', 'household_debt_gdp', 'mortgage_stress_rate', 
+
+    key_indicators = ['interest_rate', 'household_debt_gdp', 'mortgage_stress_rate',
                      'rental_vacancy_rate', 'unemployment_rate']
-    
+
     for indicator in key_indicators:
         if indicator in indicator_scores:
             penalty, std_dev, vol_level = calculate_volatility_penalty(conn, indicator, months=6)
@@ -902,28 +905,32 @@ def calculate_market_score_v3(conn=None):
                 'level': vol_level
             }
             volatility_penalties.append(penalty)
-    
-    # Apply volatility penalty
+
+    # Apply volatility penalty to the true base (pre-cycle) score
     total_volatility_penalty = sum(volatility_penalties)
-    score_after_volatility = base_score + total_volatility_penalty
-    
+    score_after_volatility = true_base_score + total_volatility_penalty
+
     # PHASE 2: Calculate sub-scores
     sub_scores = calculate_sub_scores(conn, indicator_scores)
-    
+
     # PHASE 2: Regional divergence analysis
     regional_analysis = calculate_regional_divergence(conn)
-    
+
+    # PHASE 3: Apply cycle adjustment
+    cycle_multiplier = phase1_breakdown.get('cycle_multiplier', 1.0)
+    score_after_cycle = score_after_volatility * cycle_multiplier
+
     # PHASE 3: Calculate confidence interval
     data_completeness = phase1_breakdown.get('data_completeness', 50)
     vol_levels = {k: v['level'] for k, v in volatility_analysis.items()}
     lower_bound, upper_bound, confidence_level = calculate_confidence_interval(
-        score_after_volatility, 
-        data_completeness, 
+        score_after_cycle,
+        data_completeness,
         vol_levels
     )
-    
+
     # Final score with all adjustments
-    final_score = score_after_volatility
+    final_score = score_after_cycle
     final_score = max(0, min(100, final_score))
     
     # Update signal based on confidence
@@ -952,6 +959,7 @@ def calculate_market_score_v3(conn=None):
         'volatility_analysis': volatility_analysis,
         'total_volatility_penalty': total_volatility_penalty,
         'score_after_volatility': round(score_after_volatility, 1),
+        'score_after_cycle': round(score_after_cycle, 1),
         'sub_scores': sub_scores,
         'regional_analysis': regional_analysis,
         'confidence_interval': {
@@ -1657,13 +1665,15 @@ def show_ultimate_market_analysis():
         st.code(f"""
 Phase 1: Weighted Indicators
 → Base Score: {breakdown.get('base_score', 50):.1f}/100
-  
-Phase 2: Volatility Adjustment  
+
+Phase 2: Volatility Adjustment
 → Volatility Penalty: {breakdown.get('total_volatility_penalty', 0):.1f} points
 → Score After Volatility: {breakdown.get('score_after_volatility', 50):.1f}/100
 
 Phase 3: Cycle Adjustment
 → Cycle Multiplier: ×{breakdown.get('cycle_multiplier', 1.0):.2f} (Year {breakdown.get('cycle_position', 0):.0f}/18.6)
+→ Score After Cycle: {breakdown.get('score_after_cycle', 50):.1f}/100
+
 → FINAL SCORE: {breakdown.get('final_score_v3', 50):.1f}/100
 
 Confidence Interval: [{confidence.get('lower', 0):.0f}, {confidence.get('upper', 100):.0f}]
