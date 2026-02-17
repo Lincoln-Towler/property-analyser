@@ -47,6 +47,73 @@ def is_postgres(conn):
     """Check if connection is PostgreSQL"""
     return isinstance(conn, psycopg2.extensions.connection)
 
+def get_ph(conn):
+    """Return the SQL placeholder for this connection type"""
+    return "%s" if is_postgres(conn) else "?"
+
+def db_upsert(cursor, conn, table, columns, values, conflict_cols=None):
+    """Insert a row, updating on conflict if conflict_cols provided.
+    Works with both PostgreSQL (ON CONFLICT) and SQLite (INSERT OR REPLACE)."""
+    ph = get_ph(conn)
+    placeholders = ','.join([ph] * len(columns))
+    col_str = ','.join(columns)
+
+    if conflict_cols and is_postgres(conn):
+        update_cols = [c for c in columns if c not in conflict_cols]
+        update_str = ', '.join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+        conflict_str = ', '.join(conflict_cols)
+        sql = (f"INSERT INTO {table} ({col_str}) VALUES ({placeholders}) "
+               f"ON CONFLICT ({conflict_str}) DO UPDATE SET {update_str}")
+    elif conflict_cols:
+        sql = f"INSERT OR REPLACE INTO {table} ({col_str}) VALUES ({placeholders})"
+    else:
+        sql = f"INSERT INTO {table} ({col_str}) VALUES ({placeholders})"
+
+    cursor.execute(sql, values)
+
+def csv_import_section(label, required_cols, optional_cols, table, all_columns,
+                       key_prefix, conflict_cols=None, row_mapper=None):
+    """Reusable CSV import UI: upload, preview, validate, insert row-by-row.
+    row_mapper(row) should return a tuple of values matching all_columns order.
+    If None, values are pulled from row using all_columns as keys."""
+    st.markdown(f"#### Import {label} from CSV")
+    st.markdown(f"**Required columns:** `{', '.join(required_cols)}`")
+    if optional_cols:
+        st.markdown(f"**Optional columns:** `{', '.join(optional_cols)}`")
+
+    uploaded = st.file_uploader("Choose CSV file", type="csv", key=f"{key_prefix}_csv")
+    if not uploaded:
+        return
+
+    df_import = pd.read_csv(uploaded)
+    st.dataframe(df_import.head(10))
+    st.markdown(f"**Total rows:** {len(df_import)}")
+
+    missing = [c for c in required_cols if c not in df_import.columns]
+    if missing:
+        st.error(f"Missing required columns: {', '.join(missing)}")
+        return
+
+    if not st.button(f"Import {label}", key=f"{key_prefix}_btn"):
+        return
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    success, errors = 0, 0
+    for _, row in df_import.iterrows():
+        try:
+            if row_mapper:
+                values = row_mapper(row)
+            else:
+                values = tuple(row.get(c, None) for c in all_columns)
+            db_upsert(cursor, conn, table, all_columns, values, conflict_cols)
+            success += 1
+        except Exception:
+            errors += 1
+    conn.commit()
+    conn.close()
+    st.success(f"Imported {success} rows ({errors} errors)")
+
 # Page configuration
 st.set_page_config(
     page_title="Australian Property Investment Analyzer",
@@ -3251,7 +3318,6 @@ def show_infrastructure_tracker():
     # --- Active Projects ---
     with view_tab:
         conn = get_db_connection()
-        is_pg = is_postgres(conn)
         try:
             df = pd.read_sql_query("""
                 SELECT project_name, project_type, location, state, status,
@@ -3293,7 +3359,6 @@ def show_infrastructure_tracker():
                 timeline_df['announcement_date'] = pd.to_datetime(timeline_df['announcement_date'])
                 timeline_df['expected_completion_date'] = pd.to_datetime(timeline_df['expected_completion_date'])
 
-                import plotly.express as px
                 fig = px.timeline(
                     timeline_df,
                     x_start='announcement_date',
@@ -3310,7 +3375,6 @@ def show_infrastructure_tracker():
             # Breakdown by type
             st.markdown("#### Projects by Type")
             type_counts = df['project_type'].value_counts()
-            import plotly.express as px
             fig_type = px.pie(values=type_counts.values, names=type_counts.index,
                               title="Project Types")
             st.plotly_chart(fig_type, use_container_width=True)
@@ -3354,19 +3418,17 @@ def show_infrastructure_tracker():
                 else:
                     conn = get_db_connection()
                     cursor = conn.cursor()
-                    ph = "%s" if is_postgres(conn) else "?"
                     try:
-                        cursor.execute(f"""
-                            INSERT INTO infrastructure_projects
-                            (project_name, project_type, location, state, announcement_date,
-                             construction_start_date, expected_completion_date, budget_millions,
-                             status, latitude, longitude, impact_radius_km, source, notes)
-                            VALUES ({','.join([ph]*14)})
-                        """, (project_name, project_type, location, state,
-                              str(announcement_date), str(construction_start),
-                              str(expected_completion), budget if budget > 0 else None,
-                              status, latitude if latitude != 0 else None,
-                              longitude if longitude != 0 else None, impact_radius, source, notes))
+                        cols = ['project_name', 'project_type', 'location', 'state',
+                                'announcement_date', 'construction_start_date',
+                                'expected_completion_date', 'budget_millions', 'status',
+                                'latitude', 'longitude', 'impact_radius_km', 'source', 'notes']
+                        vals = (project_name, project_type, location, state,
+                                str(announcement_date), str(construction_start),
+                                str(expected_completion), budget if budget > 0 else None,
+                                status, latitude if latitude != 0 else None,
+                                longitude if longitude != 0 else None, impact_radius, source, notes)
+                        db_upsert(cursor, conn, 'infrastructure_projects', cols, vals)
                         conn.commit()
                         st.success(f"Added project: {project_name}")
                     except Exception as e:
@@ -3376,65 +3438,38 @@ def show_infrastructure_tracker():
 
     # --- CSV Import ---
     with import_tab:
-        st.markdown("#### Import Infrastructure Projects from CSV")
-        st.markdown("**Required columns:** `project_name, project_type, location, state`")
-        st.markdown("**Optional columns:** `status, budget_millions, announcement_date, construction_start_date, "
-                     "expected_completion_date, latitude, longitude, impact_radius_km, source, notes`")
-
-        uploaded = st.file_uploader("Choose CSV file", type="csv", key="infra_csv")
-        if uploaded:
-            df_import = pd.read_csv(uploaded)
-            st.dataframe(df_import.head(10))
-            st.markdown(f"**Total rows:** {len(df_import)}")
-
-            required = ['project_name', 'project_type', 'location', 'state']
-            missing = [c for c in required if c not in df_import.columns]
-            if missing:
-                st.error(f"Missing required columns: {', '.join(missing)}")
-            elif st.button("Import Infrastructure Projects", key="infra_import_btn"):
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                ph = "%s" if is_postgres(conn) else "?"
-                success, errors = 0, 0
-                for _, row in df_import.iterrows():
-                    try:
-                        cursor.execute(f"""
-                            INSERT INTO infrastructure_projects
-                            (project_name, project_type, location, state, status,
-                             budget_millions, announcement_date, construction_start_date,
-                             expected_completion_date, latitude, longitude, impact_radius_km,
-                             source, notes)
-                            VALUES ({','.join([ph]*14)})
-                        """, (
-                            row['project_name'], row['project_type'], row['location'], row['state'],
-                            row.get('status', 'announced'),
-                            row.get('budget_millions', None),
-                            row.get('announcement_date', None),
-                            row.get('construction_start_date', None),
-                            row.get('expected_completion_date', None),
-                            row.get('latitude', None),
-                            row.get('longitude', None),
-                            row.get('impact_radius_km', 5.0),
-                            row.get('source', 'CSV Import'),
-                            row.get('notes', None)
-                        ))
-                        success += 1
-                    except Exception as e:
-                        errors += 1
-                conn.commit()
-                conn.close()
-                st.success(f"Imported {success} projects ({errors} errors)")
+        infra_cols = ['project_name', 'project_type', 'location', 'state', 'status',
+                      'budget_millions', 'announcement_date', 'construction_start_date',
+                      'expected_completion_date', 'latitude', 'longitude', 'impact_radius_km',
+                      'source', 'notes']
+        csv_import_section(
+            label="Infrastructure Projects",
+            required_cols=['project_name', 'project_type', 'location', 'state'],
+            optional_cols=['status', 'budget_millions', 'announcement_date',
+                          'construction_start_date', 'expected_completion_date',
+                          'latitude', 'longitude', 'impact_radius_km', 'source', 'notes'],
+            table='infrastructure_projects',
+            all_columns=infra_cols,
+            key_prefix='infra',
+            row_mapper=lambda row: (
+                row['project_name'], row['project_type'], row['location'], row['state'],
+                row.get('status', 'announced'), row.get('budget_millions', None),
+                row.get('announcement_date', None), row.get('construction_start_date', None),
+                row.get('expected_completion_date', None), row.get('latitude', None),
+                row.get('longitude', None), row.get('impact_radius_km', 5.0),
+                row.get('source', 'CSV Import'), row.get('notes', None)
+            )
+        )
 
 
 def calculate_infrastructure_score(conn, suburb, state):
     """Score a suburb based on proximity to infrastructure projects (0-10).
     More nearby active projects with bigger budgets = higher score."""
-    is_pg = is_postgres(conn)
     try:
         df = pd.read_sql_query("""
             SELECT budget_millions, status FROM infrastructure_projects
             WHERE state = {} AND status IN ('announced', 'approved', 'construction')
-        """.format("%s" if is_pg else "?"), conn, params=(state,))
+        """.format(get_ph(conn)), conn, params=(state,))
     except Exception:
         return 0.0
 
@@ -3499,7 +3534,6 @@ def show_migration_monitor():
 
             # Trend charts
             st.markdown("#### Interstate Migration Trends")
-            import plotly.express as px
             interstate_df = df.dropna(subset=['interstate_migration'])
             if not interstate_df.empty:
                 fig = px.line(interstate_df, x='date', y='interstate_migration', color='state',
@@ -3576,28 +3610,13 @@ def show_migration_monitor():
             if st.form_submit_button("Add Migration Data"):
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                ph = "%s" if is_postgres(conn) else "?"
+                mig_cols = ['date', 'state', 'interstate_migration', 'overseas_migration',
+                            'international_students', 'total_population', 'source']
+                mig_vals = (str(mig_date), mig_state, interstate, overseas, students,
+                            total_pop if total_pop > 0 else None, mig_source)
                 try:
-                    if is_postgres(conn):
-                        cursor.execute(f"""
-                            INSERT INTO migration_data (date, state, interstate_migration,
-                                overseas_migration, international_students, total_population, source)
-                            VALUES ({','.join([ph]*7)})
-                            ON CONFLICT (date, state) DO UPDATE SET
-                                interstate_migration = EXCLUDED.interstate_migration,
-                                overseas_migration = EXCLUDED.overseas_migration,
-                                international_students = EXCLUDED.international_students,
-                                total_population = EXCLUDED.total_population,
-                                source = EXCLUDED.source
-                        """, (str(mig_date), mig_state, interstate, overseas, students,
-                              total_pop if total_pop > 0 else None, mig_source))
-                    else:
-                        cursor.execute(f"""
-                            INSERT OR REPLACE INTO migration_data (date, state, interstate_migration,
-                                overseas_migration, international_students, total_population, source)
-                            VALUES ({','.join([ph]*7)})
-                        """, (str(mig_date), mig_state, interstate, overseas, students,
-                              total_pop if total_pop > 0 else None, mig_source))
+                    db_upsert(cursor, conn, 'migration_data', mig_cols, mig_vals,
+                              conflict_cols=['date', 'state'])
                     conn.commit()
                     st.success(f"Added migration data for {mig_state} on {mig_date}")
                 except Exception as e:
@@ -3607,73 +3626,35 @@ def show_migration_monitor():
 
     # --- CSV Import ---
     with import_tab:
-        st.markdown("#### Import Migration Data from CSV")
-        st.markdown("**Required columns:** `date, state`")
-        st.markdown("**Optional columns:** `interstate_migration, overseas_migration, international_students, total_population, source`")
-
-        uploaded = st.file_uploader("Choose CSV file", type="csv", key="mig_csv")
-        if uploaded:
-            df_import = pd.read_csv(uploaded)
-            st.dataframe(df_import.head(10))
-
-            required = ['date', 'state']
-            missing = [c for c in required if c not in df_import.columns]
-            if missing:
-                st.error(f"Missing required columns: {', '.join(missing)}")
-            elif st.button("Import Migration Data", key="mig_import_btn"):
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                ph = "%s" if is_postgres(conn) else "?"
-                is_pg = is_postgres(conn)
-                success, errors = 0, 0
-                for _, row in df_import.iterrows():
-                    try:
-                        if is_pg:
-                            cursor.execute(f"""
-                                INSERT INTO migration_data (date, state, interstate_migration,
-                                    overseas_migration, international_students, total_population, source)
-                                VALUES ({','.join([ph]*7)})
-                                ON CONFLICT (date, state) DO UPDATE SET
-                                    interstate_migration = EXCLUDED.interstate_migration,
-                                    overseas_migration = EXCLUDED.overseas_migration,
-                                    international_students = EXCLUDED.international_students,
-                                    total_population = EXCLUDED.total_population,
-                                    source = EXCLUDED.source
-                            """, (row['date'], row['state'],
-                                  row.get('interstate_migration', None),
-                                  row.get('overseas_migration', None),
-                                  row.get('international_students', None),
-                                  row.get('total_population', None),
-                                  row.get('source', 'CSV Import')))
-                        else:
-                            cursor.execute(f"""
-                                INSERT OR REPLACE INTO migration_data (date, state, interstate_migration,
-                                    overseas_migration, international_students, total_population, source)
-                                VALUES ({','.join([ph]*7)})
-                            """, (row['date'], row['state'],
-                                  row.get('interstate_migration', None),
-                                  row.get('overseas_migration', None),
-                                  row.get('international_students', None),
-                                  row.get('total_population', None),
-                                  row.get('source', 'CSV Import')))
-                        success += 1
-                    except Exception:
-                        errors += 1
-                conn.commit()
-                conn.close()
-                st.success(f"Imported {success} rows ({errors} errors)")
+        mig_cols = ['date', 'state', 'interstate_migration', 'overseas_migration',
+                    'international_students', 'total_population', 'source']
+        csv_import_section(
+            label="Migration Data",
+            required_cols=['date', 'state'],
+            optional_cols=['interstate_migration', 'overseas_migration',
+                          'international_students', 'total_population', 'source'],
+            table='migration_data',
+            all_columns=mig_cols,
+            key_prefix='mig',
+            conflict_cols=['date', 'state'],
+            row_mapper=lambda row: (
+                row['date'], row['state'],
+                row.get('interstate_migration', None), row.get('overseas_migration', None),
+                row.get('international_students', None), row.get('total_population', None),
+                row.get('source', 'CSV Import')
+            )
+        )
 
 
 def calculate_population_score(conn, state):
     """Score based on migration trends (0-10). Positive net migration = higher score."""
-    is_pg = is_postgres(conn)
     try:
         df = pd.read_sql_query("""
             SELECT interstate_migration, overseas_migration
             FROM migration_data
             WHERE state = {}
             ORDER BY date DESC LIMIT 4
-        """.format("%s" if is_pg else "?"), conn, params=(state,))
+        """.format(get_ph(conn)), conn, params=(state,))
     except Exception:
         return 0.0
 
@@ -3744,7 +3725,6 @@ def show_jobs_tracker():
 
             # Unemployment trend
             st.markdown("#### Unemployment Rate Trends")
-            import plotly.express as px
             unemp_df = df.dropna(subset=['unemployment_rate'])
             if not unemp_df.empty:
                 fig = px.line(unemp_df, x='date', y='unemployment_rate', color='region',
@@ -3833,14 +3813,12 @@ def show_jobs_tracker():
                 else:
                     conn = get_db_connection()
                     cursor = conn.cursor()
-                    ph = "%s" if is_postgres(conn) else "?"
+                    ev_cols = ['date', 'employer_name', 'event_type', 'location',
+                               'jobs_impact', 'industry', 'source', 'notes']
+                    ev_vals = (str(ev_date), ev_name, ev_type, ev_location,
+                               ev_jobs, ev_industry, ev_source, ev_notes)
                     try:
-                        cursor.execute(f"""
-                            INSERT INTO employer_events
-                            (date, employer_name, event_type, location, jobs_impact, industry, source, notes)
-                            VALUES ({','.join([ph]*8)})
-                        """, (str(ev_date), ev_name, ev_type, ev_location,
-                              ev_jobs, ev_industry, ev_source, ev_notes))
+                        db_upsert(cursor, conn, 'employer_events', ev_cols, ev_vals)
                         conn.commit()
                         st.success(f"Added event: {ev_name}")
                     except Exception as e:
@@ -3870,29 +3848,13 @@ def show_jobs_tracker():
                 else:
                     conn = get_db_connection()
                     cursor = conn.cursor()
-                    ph = "%s" if is_postgres(conn) else "?"
-                    is_pg = is_postgres(conn)
+                    emp_cols = ['date', 'region', 'total_employed', 'unemployment_rate',
+                                'job_ads_count', 'employment_growth_rate', 'source']
+                    emp_vals = (str(emp_date), emp_region, emp_total if emp_total > 0 else None,
+                                emp_unemp, emp_ads if emp_ads > 0 else None, emp_growth, emp_source)
                     try:
-                        if is_pg:
-                            cursor.execute(f"""
-                                INSERT INTO employment_data (date, region, total_employed,
-                                    unemployment_rate, job_ads_count, employment_growth_rate, source)
-                                VALUES ({','.join([ph]*7)})
-                                ON CONFLICT (date, region) DO UPDATE SET
-                                    total_employed = EXCLUDED.total_employed,
-                                    unemployment_rate = EXCLUDED.unemployment_rate,
-                                    job_ads_count = EXCLUDED.job_ads_count,
-                                    employment_growth_rate = EXCLUDED.employment_growth_rate,
-                                    source = EXCLUDED.source
-                            """, (str(emp_date), emp_region, emp_total if emp_total > 0 else None,
-                                  emp_unemp, emp_ads if emp_ads > 0 else None, emp_growth, emp_source))
-                        else:
-                            cursor.execute(f"""
-                                INSERT OR REPLACE INTO employment_data (date, region, total_employed,
-                                    unemployment_rate, job_ads_count, employment_growth_rate, source)
-                                VALUES ({','.join([ph]*7)})
-                            """, (str(emp_date), emp_region, emp_total if emp_total > 0 else None,
-                                  emp_unemp, emp_ads if emp_ads > 0 else None, emp_growth, emp_source))
+                        db_upsert(cursor, conn, 'employment_data', emp_cols, emp_vals,
+                                  conflict_cols=['date', 'region'])
                         conn.commit()
                         st.success(f"Added employment data for {emp_region}")
                     except Exception as e:
@@ -3902,102 +3864,55 @@ def show_jobs_tracker():
 
     # --- CSV Import ---
     with import_tab:
-        st.markdown("#### Import Employment Data from CSV")
-        st.markdown("**Required columns:** `date, region`")
-        st.markdown("**Optional columns:** `total_employed, unemployment_rate, job_ads_count, employment_growth_rate, source`")
-
         import_type = st.radio("Import Type", ["Employment Data", "Employer Events"],
                                horizontal=True, key="jobs_import_type")
 
-        uploaded = st.file_uploader("Choose CSV file", type="csv", key="jobs_csv")
-        if uploaded:
-            df_import = pd.read_csv(uploaded)
-            st.dataframe(df_import.head(10))
-
-            if import_type == "Employment Data":
-                required = ['date', 'region']
-                missing = [c for c in required if c not in df_import.columns]
-                if missing:
-                    st.error(f"Missing required columns: {', '.join(missing)}")
-                elif st.button("Import Employment Data", key="emp_import_btn"):
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    ph = "%s" if is_postgres(conn) else "?"
-                    is_pg = is_postgres(conn)
-                    success, errors = 0, 0
-                    for _, row in df_import.iterrows():
-                        try:
-                            if is_pg:
-                                cursor.execute(f"""
-                                    INSERT INTO employment_data (date, region, total_employed,
-                                        unemployment_rate, job_ads_count, employment_growth_rate, source)
-                                    VALUES ({','.join([ph]*7)})
-                                    ON CONFLICT (date, region) DO UPDATE SET
-                                        total_employed = EXCLUDED.total_employed,
-                                        unemployment_rate = EXCLUDED.unemployment_rate,
-                                        job_ads_count = EXCLUDED.job_ads_count,
-                                        employment_growth_rate = EXCLUDED.employment_growth_rate,
-                                        source = EXCLUDED.source
-                                """, (row['date'], row['region'],
-                                      row.get('total_employed', None),
-                                      row.get('unemployment_rate', None),
-                                      row.get('job_ads_count', None),
-                                      row.get('employment_growth_rate', None),
-                                      row.get('source', 'CSV Import')))
-                            else:
-                                cursor.execute(f"""
-                                    INSERT OR REPLACE INTO employment_data (date, region, total_employed,
-                                        unemployment_rate, job_ads_count, employment_growth_rate, source)
-                                    VALUES ({','.join([ph]*7)})
-                                """, (row['date'], row['region'],
-                                      row.get('total_employed', None),
-                                      row.get('unemployment_rate', None),
-                                      row.get('job_ads_count', None),
-                                      row.get('employment_growth_rate', None),
-                                      row.get('source', 'CSV Import')))
-                            success += 1
-                        except Exception:
-                            errors += 1
-                    conn.commit()
-                    conn.close()
-                    st.success(f"Imported {success} rows ({errors} errors)")
-            else:
-                required = ['date', 'employer_name', 'event_type', 'location']
-                missing = [c for c in required if c not in df_import.columns]
-                if missing:
-                    st.error(f"Missing required columns: {', '.join(missing)}")
-                elif st.button("Import Employer Events", key="ev_import_btn"):
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    ph = "%s" if is_postgres(conn) else "?"
-                    success, errors = 0, 0
-                    for _, row in df_import.iterrows():
-                        try:
-                            cursor.execute(f"""
-                                INSERT INTO employer_events
-                                (date, employer_name, event_type, location, jobs_impact, industry, source, notes)
-                                VALUES ({','.join([ph]*8)})
-                            """, (row['date'], row['employer_name'], row['event_type'], row['location'],
-                                  row.get('jobs_impact', None), row.get('industry', None),
-                                  row.get('source', 'CSV Import'), row.get('notes', None)))
-                            success += 1
-                        except Exception:
-                            errors += 1
-                    conn.commit()
-                    conn.close()
-                    st.success(f"Imported {success} events ({errors} errors)")
+        if import_type == "Employment Data":
+            emp_cols = ['date', 'region', 'total_employed', 'unemployment_rate',
+                        'job_ads_count', 'employment_growth_rate', 'source']
+            csv_import_section(
+                label="Employment Data",
+                required_cols=['date', 'region'],
+                optional_cols=['total_employed', 'unemployment_rate', 'job_ads_count',
+                              'employment_growth_rate', 'source'],
+                table='employment_data',
+                all_columns=emp_cols,
+                key_prefix='emp',
+                conflict_cols=['date', 'region'],
+                row_mapper=lambda row: (
+                    row['date'], row['region'],
+                    row.get('total_employed', None), row.get('unemployment_rate', None),
+                    row.get('job_ads_count', None), row.get('employment_growth_rate', None),
+                    row.get('source', 'CSV Import')
+                )
+            )
+        else:
+            ev_cols = ['date', 'employer_name', 'event_type', 'location',
+                       'jobs_impact', 'industry', 'source', 'notes']
+            csv_import_section(
+                label="Employer Events",
+                required_cols=['date', 'employer_name', 'event_type', 'location'],
+                optional_cols=['jobs_impact', 'industry', 'source', 'notes'],
+                table='employer_events',
+                all_columns=ev_cols,
+                key_prefix='ev',
+                row_mapper=lambda row: (
+                    row['date'], row['employer_name'], row['event_type'], row['location'],
+                    row.get('jobs_impact', None), row.get('industry', None),
+                    row.get('source', 'CSV Import'), row.get('notes', None)
+                )
+            )
 
 
 def calculate_employment_score(conn, region):
     """Score based on employment growth and unemployment (0-10)."""
-    is_pg = is_postgres(conn)
     try:
         df = pd.read_sql_query("""
             SELECT unemployment_rate, employment_growth_rate, job_ads_count
             FROM employment_data
             WHERE region = {}
             ORDER BY date DESC LIMIT 4
-        """.format("%s" if is_pg else "?"), conn, params=(region,))
+        """.format(get_ph(conn)), conn, params=(region,))
     except Exception:
         return 0.0
 
@@ -4045,7 +3960,6 @@ def show_supply_demand_analyzer():
 
     # Use existing property_data table for supply/demand metrics
     conn = get_db_connection()
-    is_pg = is_postgres(conn)
 
     # Check for supply-related data in property_data
     try:
@@ -4078,7 +3992,6 @@ def show_supply_demand_analyzer():
             supply_df['date'] = pd.to_datetime(supply_df['date'])
 
             st.markdown("#### Supply Indicators")
-            import plotly.express as px
             for metric in supply_df['metric_name'].unique():
                 metric_df = supply_df[supply_df['metric_name'] == metric]
                 fig = px.line(metric_df, x='date', y='value', color='location',
@@ -4153,7 +4066,7 @@ def show_supply_demand_analyzer():
 
 def calculate_supply_demand_score(conn, location):
     """Score based on supply/demand balance (0-10). Undersupply = higher score (growth potential)."""
-    is_pg = is_postgres(conn)
+    ph = get_ph(conn)
     score = 5.0  # Neutral start
 
     try:
@@ -4162,7 +4075,7 @@ def calculate_supply_demand_score(conn, location):
             SELECT value FROM property_data
             WHERE location = {} AND metric_name = 'rental_vacancy_rate'
             ORDER BY date DESC LIMIT 1
-        """.format("%s" if is_pg else "?"), conn, params=(location,))
+        """.format(ph), conn, params=(location,))
 
         if not vacancy_df.empty:
             vacancy = vacancy_df.iloc[0]['value']
@@ -4180,7 +4093,7 @@ def calculate_supply_demand_score(conn, location):
             SELECT value FROM property_data
             WHERE location = {} AND metric_name = 'days_on_market'
             ORDER BY date DESC LIMIT 1
-        """.format("%s" if is_pg else "?"), conn, params=(location,))
+        """.format(ph), conn, params=(location,))
 
         if not dom_df.empty:
             dom = dom_df.iloc[0]['value']
@@ -4271,7 +4184,6 @@ def show_suburb_scorer():
                 suburb_name, state_name = parts[0], parts[1]
                 row = latest[(latest['suburb'] == suburb_name) & (latest['state'] == state_name)].iloc[0]
 
-                import plotly.graph_objects as go
                 categories = ['Infrastructure', 'Population', 'Employment',
                              'Supply/Demand', 'Credit', 'Gentrification']
                 values = [
@@ -4372,33 +4284,15 @@ def show_suburb_scorer():
 
                     # Save to database
                     cursor = conn.cursor()
-                    ph = "%s" if is_postgres(conn) else "?"
                     today = datetime.now().strftime("%Y-%m-%d")
+                    score_cols = ['date', 'suburb', 'state', 'infrastructure_score',
+                                  'population_score', 'employment_score', 'supply_demand_score',
+                                  'credit_score', 'gentrification_score', 'total_score']
+                    score_vals = (today, score_suburb, score_state, infra_score, pop_score,
+                                  emp_score, sd_score, manual_credit, manual_gentrify, total)
                     try:
-                        if is_postgres(conn):
-                            cursor.execute(f"""
-                                INSERT INTO suburb_scores (date, suburb, state, infrastructure_score,
-                                    population_score, employment_score, supply_demand_score,
-                                    credit_score, gentrification_score, total_score)
-                                VALUES ({','.join([ph]*10)})
-                                ON CONFLICT (date, suburb, state) DO UPDATE SET
-                                    infrastructure_score = EXCLUDED.infrastructure_score,
-                                    population_score = EXCLUDED.population_score,
-                                    employment_score = EXCLUDED.employment_score,
-                                    supply_demand_score = EXCLUDED.supply_demand_score,
-                                    credit_score = EXCLUDED.credit_score,
-                                    gentrification_score = EXCLUDED.gentrification_score,
-                                    total_score = EXCLUDED.total_score
-                            """, (today, score_suburb, score_state, infra_score, pop_score,
-                                  emp_score, sd_score, manual_credit, manual_gentrify, total))
-                        else:
-                            cursor.execute(f"""
-                                INSERT OR REPLACE INTO suburb_scores (date, suburb, state,
-                                    infrastructure_score, population_score, employment_score,
-                                    supply_demand_score, credit_score, gentrification_score, total_score)
-                                VALUES ({','.join([ph]*10)})
-                            """, (today, score_suburb, score_state, infra_score, pop_score,
-                                  emp_score, sd_score, manual_credit, manual_gentrify, total))
+                        db_upsert(cursor, conn, 'suburb_scores', score_cols, score_vals,
+                                  conflict_cols=['date', 'suburb', 'state'])
                         conn.commit()
                     except Exception as e:
                         st.warning(f"Could not save score: {e}")
