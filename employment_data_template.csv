@@ -1,0 +1,9 @@
+date,region,total_employed,unemployment_rate,job_ads_count,employment_growth_rate,source
+2024-12-01,Sydney,2850000,3.4,42000,2.1,ABS 6202.0
+2024-12-01,Melbourne,2650000,3.8,38000,1.5,ABS 6202.0
+2024-12-01,Brisbane,1350000,3.2,22000,3.2,ABS 6202.0
+2024-12-01,Perth,1150000,3.1,18000,2.8,ABS 6202.0
+2024-12-01,Adelaide,680000,4.1,9500,1.2,ABS 6202.0
+2024-12-01,Hobart,135000,4.5,2200,0.5,ABS 6202.0
+2024-12-01,Canberra,250000,2.8,5500,1.8,ABS 6202.0
+2024-12-01,Darwin,85000,3.9,1800,0.3,ABS 6202.0

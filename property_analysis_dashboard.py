@@ -158,6 +158,98 @@ def init_database():
         )
     """)
     
+    # Infrastructure projects table
+    cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS infrastructure_projects (
+            id {pk_type},
+            project_name TEXT NOT NULL,
+            project_type TEXT NOT NULL,
+            location TEXT NOT NULL,
+            state TEXT NOT NULL,
+            announcement_date DATE,
+            construction_start_date DATE,
+            expected_completion_date DATE,
+            actual_completion_date DATE,
+            budget_millions REAL,
+            status TEXT,
+            latitude REAL,
+            longitude REAL,
+            impact_radius_km REAL DEFAULT 5.0,
+            source TEXT,
+            notes TEXT,
+            created_at {timestamp_type}
+        )
+    """)
+
+    # Migration data table
+    cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS migration_data (
+            id {pk_type},
+            date DATE NOT NULL,
+            state TEXT NOT NULL,
+            interstate_migration INTEGER,
+            overseas_migration INTEGER,
+            international_students INTEGER,
+            total_population INTEGER,
+            source TEXT,
+            created_at {timestamp_type},
+            UNIQUE(date, state)
+        )
+    """)
+
+    # Employment data table
+    cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS employment_data (
+            id {pk_type},
+            date DATE NOT NULL,
+            region TEXT NOT NULL,
+            total_employed INTEGER,
+            unemployment_rate REAL,
+            job_ads_count INTEGER,
+            employment_growth_rate REAL,
+            source TEXT,
+            created_at {timestamp_type},
+            UNIQUE(date, region)
+        )
+    """)
+
+    # Major employer events table
+    cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS employer_events (
+            id {pk_type},
+            date DATE NOT NULL,
+            employer_name TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            location TEXT NOT NULL,
+            jobs_impact INTEGER,
+            industry TEXT,
+            source TEXT,
+            notes TEXT,
+            created_at {timestamp_type}
+        )
+    """)
+
+    # Suburb scores table
+    cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS suburb_scores (
+            id {pk_type},
+            date DATE NOT NULL,
+            suburb TEXT NOT NULL,
+            state TEXT NOT NULL,
+            infrastructure_score REAL,
+            population_score REAL,
+            employment_score REAL,
+            supply_demand_score REAL,
+            credit_score REAL,
+            gentrification_score REAL,
+            total_score REAL,
+            rank INTEGER,
+            notes TEXT,
+            created_at {timestamp_type},
+            UNIQUE(date, suburb, state)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -998,7 +1090,7 @@ def main():
         st.header("Navigation")
         page = st.radio(
             "Select View",
-            ["Dashboard", "Ultimate Analysis", "Economic Indicators", "Location Analysis", "Anderson Cycle Tracker", "Data Management"]
+            ["Dashboard", "Ultimate Analysis", "Economic Indicators", "Location Analysis", "Anderson Cycle Tracker", "Leading Indicators", "Data Management"]
         )
         
         st.markdown("---")
@@ -1024,6 +1116,8 @@ def main():
         show_anderson_tracker()
     elif page == "Data Management":
         show_data_management()
+    elif page == "Leading Indicators":
+        show_leading_indicators()
     elif page == "Ultimate Analysis":
         show_ultimate_market_analysis()
 
@@ -3115,6 +3209,1226 @@ Please analyze this data and provide insights on:
         
         conn.close()
 
-    
+
+
+# ============================================================
+# LEADING INDICATORS MODULE
+# ============================================================
+
+def show_leading_indicators():
+    """Main page for leading indicators with tab navigation"""
+    st.header("📡 Leading Indicators")
+    st.markdown("Track forward-looking signals that predict property market movements 6-18 months ahead.")
+    st.markdown("---")
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🚇 Infrastructure", "👥 Migration", "💼 Jobs Growth",
+        "🏗️ Supply/Demand", "🏆 Suburb Scorer"
+    ])
+
+    with tab1:
+        show_infrastructure_tracker()
+    with tab2:
+        show_migration_monitor()
+    with tab3:
+        show_jobs_tracker()
+    with tab4:
+        show_supply_demand_analyzer()
+    with tab5:
+        show_suburb_scorer()
+
+
+# -------------------- 1. INFRASTRUCTURE TRACKER --------------------
+
+def show_infrastructure_tracker():
+    """Display infrastructure projects and impact analysis"""
+    st.subheader("🚇 Infrastructure Project Tracker")
+    st.markdown("Infrastructure investment has a **6-18 month lead time** on property prices. "
+                "Properties within 5 km of major projects typically see above-average growth.")
+
+    view_tab, add_tab, import_tab = st.tabs(["Active Projects", "Add Project", "CSV Import"])
+
+    # --- Active Projects ---
+    with view_tab:
+        conn = get_db_connection()
+        is_pg = is_postgres(conn)
+        try:
+            df = pd.read_sql_query("""
+                SELECT project_name, project_type, location, state, status,
+                       budget_millions, announcement_date, expected_completion_date
+                FROM infrastructure_projects
+                ORDER BY announcement_date DESC
+            """, conn)
+        except Exception:
+            df = pd.DataFrame()
+        conn.close()
+
+        if not df.empty:
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Projects", len(df))
+            with col2:
+                active = len(df[df['status'].isin(['announced', 'approved', 'construction'])])
+                st.metric("Active", active)
+            with col3:
+                total_budget = df['budget_millions'].sum()
+                st.metric("Total Budget", f"${total_budget:,.0f}M" if pd.notna(total_budget) else "N/A")
+            with col4:
+                completed = len(df[df['status'] == 'completed'])
+                st.metric("Completed", completed)
+
+            # Filter by status
+            statuses = ['All'] + sorted(df['status'].dropna().unique().tolist())
+            selected_status = st.selectbox("Filter by status", statuses, key="infra_status_filter")
+            if selected_status != 'All':
+                df = df[df['status'] == selected_status]
+
+            st.dataframe(df, use_container_width=True)
+
+            # Timeline chart
+            timeline_df = df.dropna(subset=['announcement_date', 'expected_completion_date']).copy()
+            if not timeline_df.empty:
+                st.markdown("#### Project Timeline")
+                timeline_df['announcement_date'] = pd.to_datetime(timeline_df['announcement_date'])
+                timeline_df['expected_completion_date'] = pd.to_datetime(timeline_df['expected_completion_date'])
+
+                import plotly.express as px
+                fig = px.timeline(
+                    timeline_df,
+                    x_start='announcement_date',
+                    x_end='expected_completion_date',
+                    y='project_name',
+                    color='status',
+                    hover_data=['location', 'budget_millions'],
+                    title="Infrastructure Project Timeline"
+                )
+                fig.update_yaxes(autorange="reversed")
+                fig.update_layout(height=max(300, len(timeline_df) * 40))
+                st.plotly_chart(fig, use_container_width=True)
+
+            # Breakdown by type
+            st.markdown("#### Projects by Type")
+            type_counts = df['project_type'].value_counts()
+            import plotly.express as px
+            fig_type = px.pie(values=type_counts.values, names=type_counts.index,
+                              title="Project Types")
+            st.plotly_chart(fig_type, use_container_width=True)
+        else:
+            st.info("No infrastructure projects tracked yet. Use the **Add Project** or **CSV Import** tab to get started.")
+
+    # --- Add Project ---
+    with add_tab:
+        st.markdown("#### Add New Infrastructure Project")
+        with st.form("add_infra_project", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                project_name = st.text_input("Project Name *")
+                project_type = st.selectbox("Project Type *",
+                    ["rail", "road", "hospital", "school", "airport", "port", "mixed_use", "other"])
+                location = st.text_input("Location *")
+                state = st.selectbox("State *",
+                    ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"])
+            with col2:
+                status = st.selectbox("Status",
+                    ["announced", "approved", "construction", "completed", "cancelled"])
+                budget = st.number_input("Budget ($ millions)", min_value=0.0, step=10.0)
+                announcement_date = st.date_input("Announcement Date")
+                expected_completion = st.date_input("Expected Completion Date")
+
+            col3, col4 = st.columns(2)
+            with col3:
+                latitude = st.number_input("Latitude", value=0.0, format="%.6f")
+                construction_start = st.date_input("Construction Start Date")
+            with col4:
+                longitude = st.number_input("Longitude", value=0.0, format="%.6f")
+                impact_radius = st.number_input("Impact Radius (km)", value=5.0, min_value=0.1, step=0.5)
+
+            source = st.text_input("Source (e.g. government website)")
+            notes = st.text_area("Notes")
+
+            submitted = st.form_submit_button("Add Project")
+            if submitted:
+                if not project_name or not location:
+                    st.error("Project Name and Location are required.")
+                else:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    ph = "%s" if is_postgres(conn) else "?"
+                    try:
+                        cursor.execute(f"""
+                            INSERT INTO infrastructure_projects
+                            (project_name, project_type, location, state, announcement_date,
+                             construction_start_date, expected_completion_date, budget_millions,
+                             status, latitude, longitude, impact_radius_km, source, notes)
+                            VALUES ({','.join([ph]*14)})
+                        """, (project_name, project_type, location, state,
+                              str(announcement_date), str(construction_start),
+                              str(expected_completion), budget if budget > 0 else None,
+                              status, latitude if latitude != 0 else None,
+                              longitude if longitude != 0 else None, impact_radius, source, notes))
+                        conn.commit()
+                        st.success(f"Added project: {project_name}")
+                    except Exception as e:
+                        st.error(f"Error adding project: {e}")
+                    finally:
+                        conn.close()
+
+    # --- CSV Import ---
+    with import_tab:
+        st.markdown("#### Import Infrastructure Projects from CSV")
+        st.markdown("**Required columns:** `project_name, project_type, location, state`")
+        st.markdown("**Optional columns:** `status, budget_millions, announcement_date, construction_start_date, "
+                     "expected_completion_date, latitude, longitude, impact_radius_km, source, notes`")
+
+        uploaded = st.file_uploader("Choose CSV file", type="csv", key="infra_csv")
+        if uploaded:
+            df_import = pd.read_csv(uploaded)
+            st.dataframe(df_import.head(10))
+            st.markdown(f"**Total rows:** {len(df_import)}")
+
+            required = ['project_name', 'project_type', 'location', 'state']
+            missing = [c for c in required if c not in df_import.columns]
+            if missing:
+                st.error(f"Missing required columns: {', '.join(missing)}")
+            elif st.button("Import Infrastructure Projects", key="infra_import_btn"):
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                ph = "%s" if is_postgres(conn) else "?"
+                success, errors = 0, 0
+                for _, row in df_import.iterrows():
+                    try:
+                        cursor.execute(f"""
+                            INSERT INTO infrastructure_projects
+                            (project_name, project_type, location, state, status,
+                             budget_millions, announcement_date, construction_start_date,
+                             expected_completion_date, latitude, longitude, impact_radius_km,
+                             source, notes)
+                            VALUES ({','.join([ph]*14)})
+                        """, (
+                            row['project_name'], row['project_type'], row['location'], row['state'],
+                            row.get('status', 'announced'),
+                            row.get('budget_millions', None),
+                            row.get('announcement_date', None),
+                            row.get('construction_start_date', None),
+                            row.get('expected_completion_date', None),
+                            row.get('latitude', None),
+                            row.get('longitude', None),
+                            row.get('impact_radius_km', 5.0),
+                            row.get('source', 'CSV Import'),
+                            row.get('notes', None)
+                        ))
+                        success += 1
+                    except Exception as e:
+                        errors += 1
+                conn.commit()
+                conn.close()
+                st.success(f"Imported {success} projects ({errors} errors)")
+
+
+def calculate_infrastructure_score(conn, suburb, state):
+    """Score a suburb based on proximity to infrastructure projects (0-10).
+    More nearby active projects with bigger budgets = higher score."""
+    is_pg = is_postgres(conn)
+    try:
+        df = pd.read_sql_query("""
+            SELECT budget_millions, status FROM infrastructure_projects
+            WHERE state = {} AND status IN ('announced', 'approved', 'construction')
+        """.format("%s" if is_pg else "?"), conn, params=(state,))
+    except Exception:
+        return 0.0
+
+    if df.empty:
+        return 0.0
+
+    # Simple scoring: each active project adds points, weighted by budget
+    score = 0.0
+    for _, row in df.iterrows():
+        budget = row.get('budget_millions', 0) or 0
+        if budget >= 1000:
+            score += 3.0
+        elif budget >= 500:
+            score += 2.0
+        elif budget >= 100:
+            score += 1.5
+        else:
+            score += 1.0
+        # Bonus for construction phase (more certain)
+        if row.get('status') == 'construction':
+            score += 0.5
+
+    return min(10.0, round(score, 1))
+
+
+# -------------------- 2. MIGRATION MONITOR --------------------
+
+def show_migration_monitor():
+    """Display migration trends and patterns"""
+    st.subheader("👥 Migration Monitor")
+    st.markdown("Population growth is one of the strongest drivers of housing demand. "
+                "Track interstate and overseas migration to spot emerging hotspots.")
+
+    view_tab, add_tab, import_tab = st.tabs(["Migration Trends", "Add Data", "CSV Import"])
+
+    with view_tab:
+        conn = get_db_connection()
+        try:
+            df = pd.read_sql_query("""
+                SELECT date, state, interstate_migration, overseas_migration,
+                       international_students, total_population
+                FROM migration_data
+                ORDER BY date DESC
+            """, conn)
+        except Exception:
+            df = pd.DataFrame()
+        conn.close()
+
+        if not df.empty:
+            df['date'] = pd.to_datetime(df['date'])
+
+            # Summary by state
+            st.markdown("#### Latest Migration by State")
+            latest_date = df['date'].max()
+            latest = df[df['date'] == latest_date].copy()
+            if not latest.empty:
+                cols = st.columns(min(len(latest), 4))
+                for i, (_, row) in enumerate(latest.iterrows()):
+                    with cols[i % 4]:
+                        net = (row.get('interstate_migration') or 0) + (row.get('overseas_migration') or 0)
+                        st.metric(row['state'], f"Net: {net:+,}")
+
+            # Trend charts
+            st.markdown("#### Interstate Migration Trends")
+            import plotly.express as px
+            interstate_df = df.dropna(subset=['interstate_migration'])
+            if not interstate_df.empty:
+                fig = px.line(interstate_df, x='date', y='interstate_migration', color='state',
+                              title="Net Interstate Migration by State")
+                st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("#### Overseas Migration Trends")
+            overseas_df = df.dropna(subset=['overseas_migration'])
+            if not overseas_df.empty:
+                fig2 = px.line(overseas_df, x='date', y='overseas_migration', color='state',
+                               title="Net Overseas Migration by State")
+                st.plotly_chart(fig2, use_container_width=True)
+
+            # Winners / Losers
+            st.markdown("#### Migration Winners & Losers")
+            if len(df['date'].unique()) >= 2:
+                dates_sorted = sorted(df['date'].unique())
+                recent = df[df['date'] == dates_sorted[-1]].set_index('state')
+                previous = df[df['date'] == dates_sorted[-2]].set_index('state')
+                if not recent.empty and not previous.empty:
+                    recent['interstate_change'] = recent['interstate_migration'] - previous.reindex(recent.index)['interstate_migration']
+                    winners = recent.sort_values('interstate_change', ascending=False)
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("**Winners (gaining population):**")
+                        for state_name in winners.head(3).index:
+                            change = winners.loc[state_name, 'interstate_change']
+                            if pd.notna(change):
+                                st.markdown(f"- **{state_name}**: {change:+,.0f}")
+                    with col2:
+                        st.markdown("**Losers (losing population):**")
+                        for state_name in winners.tail(3).index:
+                            change = winners.loc[state_name, 'interstate_change']
+                            if pd.notna(change):
+                                st.markdown(f"- **{state_name}**: {change:+,.0f}")
+
+            # Alerts
+            st.markdown("#### Migration Alerts")
+            alert_found = False
+            for state_name in df['state'].unique():
+                state_df = df[df['state'] == state_name].sort_values('date')
+                if len(state_df) >= 2:
+                    current = state_df.iloc[0].get('interstate_migration', 0) or 0
+                    prev = state_df.iloc[1].get('interstate_migration', 0) or 0
+                    if prev != 0:
+                        pct_change = ((current - prev) / abs(prev)) * 100
+                        if abs(pct_change) > 10:
+                            alert_found = True
+                            if pct_change > 0:
+                                st.success(f"**{state_name}**: Interstate migration up {pct_change:.0f}%")
+                            else:
+                                st.warning(f"**{state_name}**: Interstate migration down {pct_change:.0f}%")
+            if not alert_found:
+                st.info("No significant migration changes (>10%) detected.")
+        else:
+            st.info("No migration data yet. Use the **Add Data** or **CSV Import** tab to get started.")
+
+    # --- Add Data ---
+    with add_tab:
+        st.markdown("#### Add Migration Data")
+        with st.form("add_migration", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                mig_date = st.date_input("Date *", key="mig_date")
+                mig_state = st.selectbox("State *",
+                    ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"], key="mig_state")
+                interstate = st.number_input("Net Interstate Migration", step=100, key="mig_interstate")
+            with col2:
+                overseas = st.number_input("Net Overseas Migration", step=100, key="mig_overseas")
+                students = st.number_input("International Students", min_value=0, step=100, key="mig_students")
+                total_pop = st.number_input("Total Population", min_value=0, step=1000, key="mig_pop")
+            mig_source = st.text_input("Source", key="mig_source")
+
+            if st.form_submit_button("Add Migration Data"):
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                ph = "%s" if is_postgres(conn) else "?"
+                try:
+                    if is_postgres(conn):
+                        cursor.execute(f"""
+                            INSERT INTO migration_data (date, state, interstate_migration,
+                                overseas_migration, international_students, total_population, source)
+                            VALUES ({','.join([ph]*7)})
+                            ON CONFLICT (date, state) DO UPDATE SET
+                                interstate_migration = EXCLUDED.interstate_migration,
+                                overseas_migration = EXCLUDED.overseas_migration,
+                                international_students = EXCLUDED.international_students,
+                                total_population = EXCLUDED.total_population,
+                                source = EXCLUDED.source
+                        """, (str(mig_date), mig_state, interstate, overseas, students,
+                              total_pop if total_pop > 0 else None, mig_source))
+                    else:
+                        cursor.execute(f"""
+                            INSERT OR REPLACE INTO migration_data (date, state, interstate_migration,
+                                overseas_migration, international_students, total_population, source)
+                            VALUES ({','.join([ph]*7)})
+                        """, (str(mig_date), mig_state, interstate, overseas, students,
+                              total_pop if total_pop > 0 else None, mig_source))
+                    conn.commit()
+                    st.success(f"Added migration data for {mig_state} on {mig_date}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+                finally:
+                    conn.close()
+
+    # --- CSV Import ---
+    with import_tab:
+        st.markdown("#### Import Migration Data from CSV")
+        st.markdown("**Required columns:** `date, state`")
+        st.markdown("**Optional columns:** `interstate_migration, overseas_migration, international_students, total_population, source`")
+
+        uploaded = st.file_uploader("Choose CSV file", type="csv", key="mig_csv")
+        if uploaded:
+            df_import = pd.read_csv(uploaded)
+            st.dataframe(df_import.head(10))
+
+            required = ['date', 'state']
+            missing = [c for c in required if c not in df_import.columns]
+            if missing:
+                st.error(f"Missing required columns: {', '.join(missing)}")
+            elif st.button("Import Migration Data", key="mig_import_btn"):
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                ph = "%s" if is_postgres(conn) else "?"
+                is_pg = is_postgres(conn)
+                success, errors = 0, 0
+                for _, row in df_import.iterrows():
+                    try:
+                        if is_pg:
+                            cursor.execute(f"""
+                                INSERT INTO migration_data (date, state, interstate_migration,
+                                    overseas_migration, international_students, total_population, source)
+                                VALUES ({','.join([ph]*7)})
+                                ON CONFLICT (date, state) DO UPDATE SET
+                                    interstate_migration = EXCLUDED.interstate_migration,
+                                    overseas_migration = EXCLUDED.overseas_migration,
+                                    international_students = EXCLUDED.international_students,
+                                    total_population = EXCLUDED.total_population,
+                                    source = EXCLUDED.source
+                            """, (row['date'], row['state'],
+                                  row.get('interstate_migration', None),
+                                  row.get('overseas_migration', None),
+                                  row.get('international_students', None),
+                                  row.get('total_population', None),
+                                  row.get('source', 'CSV Import')))
+                        else:
+                            cursor.execute(f"""
+                                INSERT OR REPLACE INTO migration_data (date, state, interstate_migration,
+                                    overseas_migration, international_students, total_population, source)
+                                VALUES ({','.join([ph]*7)})
+                            """, (row['date'], row['state'],
+                                  row.get('interstate_migration', None),
+                                  row.get('overseas_migration', None),
+                                  row.get('international_students', None),
+                                  row.get('total_population', None),
+                                  row.get('source', 'CSV Import')))
+                        success += 1
+                    except Exception:
+                        errors += 1
+                conn.commit()
+                conn.close()
+                st.success(f"Imported {success} rows ({errors} errors)")
+
+
+def calculate_population_score(conn, state):
+    """Score based on migration trends (0-10). Positive net migration = higher score."""
+    is_pg = is_postgres(conn)
+    try:
+        df = pd.read_sql_query("""
+            SELECT interstate_migration, overseas_migration
+            FROM migration_data
+            WHERE state = {}
+            ORDER BY date DESC LIMIT 4
+        """.format("%s" if is_pg else "?"), conn, params=(state,))
+    except Exception:
+        return 0.0
+
+    if df.empty:
+        return 0.0
+
+    avg_interstate = df['interstate_migration'].mean() or 0
+    avg_overseas = df['overseas_migration'].mean() or 0
+    net = avg_interstate + avg_overseas
+
+    # Scoring: strong positive migration = high score
+    if net > 20000:
+        score = 10.0
+    elif net > 10000:
+        score = 8.0
+    elif net > 5000:
+        score = 6.0
+    elif net > 0:
+        score = 4.0
+    elif net > -5000:
+        score = 2.0
+    else:
+        score = 0.0
+
+    return round(score, 1)
+
+
+# -------------------- 3. JOBS GROWTH TRACKER --------------------
+
+def show_jobs_tracker():
+    """Display employment growth and job ads"""
+    st.subheader("💼 Jobs Growth Tracker")
+    st.markdown("Employment growth precedes property price growth. Regions with rising jobs "
+                "and low unemployment attract workers and drive housing demand.")
+
+    view_tab, events_tab, add_tab, import_tab = st.tabs([
+        "Employment Trends", "Employer Events", "Add Data", "CSV Import"
+    ])
+
+    with view_tab:
+        conn = get_db_connection()
+        try:
+            df = pd.read_sql_query("""
+                SELECT date, region, total_employed, unemployment_rate,
+                       job_ads_count, employment_growth_rate
+                FROM employment_data ORDER BY date DESC
+            """, conn)
+        except Exception:
+            df = pd.DataFrame()
+        conn.close()
+
+        if not df.empty:
+            df['date'] = pd.to_datetime(df['date'])
+
+            # Summary
+            latest_date = df['date'].max()
+            latest = df[df['date'] == latest_date]
+
+            st.markdown("#### Latest Employment Snapshot")
+            cols = st.columns(min(len(latest), 4))
+            for i, (_, row) in enumerate(latest.iterrows()):
+                with cols[i % 4]:
+                    unemp = row.get('unemployment_rate', None)
+                    growth = row.get('employment_growth_rate', None)
+                    label = f"{unemp:.1f}% unemp" if pd.notna(unemp) else "N/A"
+                    delta = f"{growth:+.1f}% growth" if pd.notna(growth) else None
+                    st.metric(row['region'], label, delta)
+
+            # Unemployment trend
+            st.markdown("#### Unemployment Rate Trends")
+            import plotly.express as px
+            unemp_df = df.dropna(subset=['unemployment_rate'])
+            if not unemp_df.empty:
+                fig = px.line(unemp_df, x='date', y='unemployment_rate', color='region',
+                              title="Unemployment Rate by Region")
+                st.plotly_chart(fig, use_container_width=True)
+
+            # Job ads trend
+            st.markdown("#### Job Ads Trend")
+            ads_df = df.dropna(subset=['job_ads_count'])
+            if not ads_df.empty:
+                fig2 = px.bar(ads_df, x='date', y='job_ads_count', color='region',
+                              title="Job Advertisements by Region")
+                st.plotly_chart(fig2, use_container_width=True)
+
+            # Employment growth
+            st.markdown("#### Employment Growth Rate")
+            growth_df = df.dropna(subset=['employment_growth_rate'])
+            if not growth_df.empty:
+                fig3 = px.bar(growth_df, x='region', y='employment_growth_rate',
+                              color='employment_growth_rate',
+                              color_continuous_scale=['red', 'yellow', 'green'],
+                              title="YoY Employment Growth by Region")
+                st.plotly_chart(fig3, use_container_width=True)
+
+            # Hotspots
+            st.markdown("#### Employment Hotspots")
+            if 'employment_growth_rate' in latest.columns:
+                hotspots = latest.sort_values('employment_growth_rate', ascending=False)
+                for _, row in hotspots.head(5).iterrows():
+                    growth = row.get('employment_growth_rate', 0) or 0
+                    if growth > 2:
+                        st.success(f"**{row['region']}**: {growth:+.1f}% employment growth - Strong job market")
+                    elif growth > 0:
+                        st.info(f"**{row['region']}**: {growth:+.1f}% employment growth")
+                    else:
+                        st.warning(f"**{row['region']}**: {growth:+.1f}% employment growth - Declining")
+        else:
+            st.info("No employment data yet. Use the **Add Data** or **CSV Import** tab to get started.")
+
+    # --- Employer Events ---
+    with events_tab:
+        conn = get_db_connection()
+        try:
+            events_df = pd.read_sql_query("""
+                SELECT date, employer_name, event_type, location, jobs_impact, industry, notes
+                FROM employer_events ORDER BY date DESC
+            """, conn)
+        except Exception:
+            events_df = pd.DataFrame()
+        conn.close()
+
+        if not events_df.empty:
+            st.markdown("#### Recent Employer Events")
+
+            # Color-code by type
+            for _, event in events_df.iterrows():
+                impact = event.get('jobs_impact', 0) or 0
+                icon = "🟢" if impact > 0 else "🔴" if impact < 0 else "🟡"
+                st.markdown(f"{icon} **{event['employer_name']}** - {event['event_type']} "
+                           f"in {event['location']} ({impact:+,} jobs) - {event.get('date', '')}")
+                if event.get('notes'):
+                    st.caption(event['notes'])
+        else:
+            st.info("No employer events recorded yet.")
+
+        # Add employer event form
+        st.markdown("---")
+        st.markdown("#### Add Employer Event")
+        with st.form("add_employer_event", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                ev_date = st.date_input("Date", key="ev_date")
+                ev_name = st.text_input("Employer Name *", key="ev_name")
+                ev_type = st.selectbox("Event Type",
+                    ["new_facility", "expansion", "relocation", "closure", "layoff"], key="ev_type")
+            with col2:
+                ev_location = st.text_input("Location *", key="ev_location")
+                ev_jobs = st.number_input("Jobs Impact (+/-)", step=10, key="ev_jobs")
+                ev_industry = st.text_input("Industry", key="ev_industry")
+            ev_notes = st.text_area("Notes", key="ev_notes")
+            ev_source = st.text_input("Source", key="ev_source")
+
+            if st.form_submit_button("Add Event"):
+                if not ev_name or not ev_location:
+                    st.error("Employer Name and Location are required.")
+                else:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    ph = "%s" if is_postgres(conn) else "?"
+                    try:
+                        cursor.execute(f"""
+                            INSERT INTO employer_events
+                            (date, employer_name, event_type, location, jobs_impact, industry, source, notes)
+                            VALUES ({','.join([ph]*8)})
+                        """, (str(ev_date), ev_name, ev_type, ev_location,
+                              ev_jobs, ev_industry, ev_source, ev_notes))
+                        conn.commit()
+                        st.success(f"Added event: {ev_name}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+                    finally:
+                        conn.close()
+
+    # --- Add Employment Data ---
+    with add_tab:
+        st.markdown("#### Add Employment Data")
+        with st.form("add_employment", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                emp_date = st.date_input("Date *", key="emp_date")
+                emp_region = st.text_input("Region *", key="emp_region")
+                emp_total = st.number_input("Total Employed", min_value=0, step=1000, key="emp_total")
+            with col2:
+                emp_unemp = st.number_input("Unemployment Rate (%)", min_value=0.0, max_value=50.0,
+                                            step=0.1, key="emp_unemp")
+                emp_ads = st.number_input("Job Ads Count", min_value=0, step=100, key="emp_ads")
+                emp_growth = st.number_input("Employment Growth Rate (% YoY)", step=0.1, key="emp_growth")
+            emp_source = st.text_input("Source", key="emp_source")
+
+            if st.form_submit_button("Add Employment Data"):
+                if not emp_region:
+                    st.error("Region is required.")
+                else:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    ph = "%s" if is_postgres(conn) else "?"
+                    is_pg = is_postgres(conn)
+                    try:
+                        if is_pg:
+                            cursor.execute(f"""
+                                INSERT INTO employment_data (date, region, total_employed,
+                                    unemployment_rate, job_ads_count, employment_growth_rate, source)
+                                VALUES ({','.join([ph]*7)})
+                                ON CONFLICT (date, region) DO UPDATE SET
+                                    total_employed = EXCLUDED.total_employed,
+                                    unemployment_rate = EXCLUDED.unemployment_rate,
+                                    job_ads_count = EXCLUDED.job_ads_count,
+                                    employment_growth_rate = EXCLUDED.employment_growth_rate,
+                                    source = EXCLUDED.source
+                            """, (str(emp_date), emp_region, emp_total if emp_total > 0 else None,
+                                  emp_unemp, emp_ads if emp_ads > 0 else None, emp_growth, emp_source))
+                        else:
+                            cursor.execute(f"""
+                                INSERT OR REPLACE INTO employment_data (date, region, total_employed,
+                                    unemployment_rate, job_ads_count, employment_growth_rate, source)
+                                VALUES ({','.join([ph]*7)})
+                            """, (str(emp_date), emp_region, emp_total if emp_total > 0 else None,
+                                  emp_unemp, emp_ads if emp_ads > 0 else None, emp_growth, emp_source))
+                        conn.commit()
+                        st.success(f"Added employment data for {emp_region}")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+                    finally:
+                        conn.close()
+
+    # --- CSV Import ---
+    with import_tab:
+        st.markdown("#### Import Employment Data from CSV")
+        st.markdown("**Required columns:** `date, region`")
+        st.markdown("**Optional columns:** `total_employed, unemployment_rate, job_ads_count, employment_growth_rate, source`")
+
+        import_type = st.radio("Import Type", ["Employment Data", "Employer Events"],
+                               horizontal=True, key="jobs_import_type")
+
+        uploaded = st.file_uploader("Choose CSV file", type="csv", key="jobs_csv")
+        if uploaded:
+            df_import = pd.read_csv(uploaded)
+            st.dataframe(df_import.head(10))
+
+            if import_type == "Employment Data":
+                required = ['date', 'region']
+                missing = [c for c in required if c not in df_import.columns]
+                if missing:
+                    st.error(f"Missing required columns: {', '.join(missing)}")
+                elif st.button("Import Employment Data", key="emp_import_btn"):
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    ph = "%s" if is_postgres(conn) else "?"
+                    is_pg = is_postgres(conn)
+                    success, errors = 0, 0
+                    for _, row in df_import.iterrows():
+                        try:
+                            if is_pg:
+                                cursor.execute(f"""
+                                    INSERT INTO employment_data (date, region, total_employed,
+                                        unemployment_rate, job_ads_count, employment_growth_rate, source)
+                                    VALUES ({','.join([ph]*7)})
+                                    ON CONFLICT (date, region) DO UPDATE SET
+                                        total_employed = EXCLUDED.total_employed,
+                                        unemployment_rate = EXCLUDED.unemployment_rate,
+                                        job_ads_count = EXCLUDED.job_ads_count,
+                                        employment_growth_rate = EXCLUDED.employment_growth_rate,
+                                        source = EXCLUDED.source
+                                """, (row['date'], row['region'],
+                                      row.get('total_employed', None),
+                                      row.get('unemployment_rate', None),
+                                      row.get('job_ads_count', None),
+                                      row.get('employment_growth_rate', None),
+                                      row.get('source', 'CSV Import')))
+                            else:
+                                cursor.execute(f"""
+                                    INSERT OR REPLACE INTO employment_data (date, region, total_employed,
+                                        unemployment_rate, job_ads_count, employment_growth_rate, source)
+                                    VALUES ({','.join([ph]*7)})
+                                """, (row['date'], row['region'],
+                                      row.get('total_employed', None),
+                                      row.get('unemployment_rate', None),
+                                      row.get('job_ads_count', None),
+                                      row.get('employment_growth_rate', None),
+                                      row.get('source', 'CSV Import')))
+                            success += 1
+                        except Exception:
+                            errors += 1
+                    conn.commit()
+                    conn.close()
+                    st.success(f"Imported {success} rows ({errors} errors)")
+            else:
+                required = ['date', 'employer_name', 'event_type', 'location']
+                missing = [c for c in required if c not in df_import.columns]
+                if missing:
+                    st.error(f"Missing required columns: {', '.join(missing)}")
+                elif st.button("Import Employer Events", key="ev_import_btn"):
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    ph = "%s" if is_postgres(conn) else "?"
+                    success, errors = 0, 0
+                    for _, row in df_import.iterrows():
+                        try:
+                            cursor.execute(f"""
+                                INSERT INTO employer_events
+                                (date, employer_name, event_type, location, jobs_impact, industry, source, notes)
+                                VALUES ({','.join([ph]*8)})
+                            """, (row['date'], row['employer_name'], row['event_type'], row['location'],
+                                  row.get('jobs_impact', None), row.get('industry', None),
+                                  row.get('source', 'CSV Import'), row.get('notes', None)))
+                            success += 1
+                        except Exception:
+                            errors += 1
+                    conn.commit()
+                    conn.close()
+                    st.success(f"Imported {success} events ({errors} errors)")
+
+
+def calculate_employment_score(conn, region):
+    """Score based on employment growth and unemployment (0-10)."""
+    is_pg = is_postgres(conn)
+    try:
+        df = pd.read_sql_query("""
+            SELECT unemployment_rate, employment_growth_rate, job_ads_count
+            FROM employment_data
+            WHERE region = {}
+            ORDER BY date DESC LIMIT 4
+        """.format("%s" if is_pg else "?"), conn, params=(region,))
+    except Exception:
+        return 0.0
+
+    if df.empty:
+        return 0.0
+
+    score = 5.0  # Start neutral
+
+    # Unemployment component (lower is better)
+    avg_unemp = df['unemployment_rate'].mean()
+    if pd.notna(avg_unemp):
+        if avg_unemp < 3.0:
+            score += 2.5
+        elif avg_unemp < 4.5:
+            score += 1.5
+        elif avg_unemp < 6.0:
+            score += 0.0
+        else:
+            score -= 2.0
+
+    # Growth component
+    avg_growth = df['employment_growth_rate'].mean()
+    if pd.notna(avg_growth):
+        if avg_growth > 3.0:
+            score += 2.5
+        elif avg_growth > 1.5:
+            score += 1.5
+        elif avg_growth > 0:
+            score += 0.5
+        else:
+            score -= 1.5
+
+    return max(0.0, min(10.0, round(score, 1)))
+
+
+# -------------------- 4. SUPPLY/DEMAND ANALYZER --------------------
+
+def show_supply_demand_analyzer():
+    """Analyze housing supply vs demand"""
+    st.subheader("🏗️ Supply/Demand Analyzer")
+    st.markdown("When demand outpaces supply, prices rise. Track building approvals, "
+                "population growth, and the construction pipeline to predict shortages.")
+
+    st.markdown("---")
+
+    # Use existing property_data table for supply/demand metrics
+    conn = get_db_connection()
+    is_pg = is_postgres(conn)
+
+    # Check for supply-related data in property_data
+    try:
+        supply_df = pd.read_sql_query("""
+            SELECT date, location, metric_name, value
+            FROM property_data
+            WHERE metric_name IN ('building_approvals', 'dwellings_approved',
+                                  'housing_supply', 'days_on_market',
+                                  'listings_count', 'auction_clearance_rate',
+                                  'rental_vacancy_rate')
+            ORDER BY date DESC
+        """, conn)
+    except Exception:
+        supply_df = pd.DataFrame()
+
+    # Also pull migration for demand proxy
+    try:
+        migration_df = pd.read_sql_query("""
+            SELECT date, state, interstate_migration, overseas_migration, total_population
+            FROM migration_data ORDER BY date DESC
+        """, conn)
+    except Exception:
+        migration_df = pd.DataFrame()
+
+    conn.close()
+
+    if not supply_df.empty or not migration_df.empty:
+        # Supply metrics
+        if not supply_df.empty:
+            supply_df['date'] = pd.to_datetime(supply_df['date'])
+
+            st.markdown("#### Supply Indicators")
+            import plotly.express as px
+            for metric in supply_df['metric_name'].unique():
+                metric_df = supply_df[supply_df['metric_name'] == metric]
+                fig = px.line(metric_df, x='date', y='value', color='location',
+                              title=f"{metric.replace('_', ' ').title()} by Location")
+                st.plotly_chart(fig, use_container_width=True)
+
+        # Supply/Demand balance
+        st.markdown("#### Supply vs Demand Assessment")
+
+        # Check for vacancy rate as proxy for supply/demand balance
+        if not supply_df.empty:
+            vacancy = supply_df[supply_df['metric_name'] == 'rental_vacancy_rate']
+            if not vacancy.empty:
+                latest_vacancy = vacancy.sort_values('date').groupby('location').last()
+                for loc, row in latest_vacancy.iterrows():
+                    rate = row['value']
+                    if rate < 1.0:
+                        st.error(f"**{loc}**: Vacancy rate {rate:.1f}% - Severe undersupply (demand >> supply)")
+                    elif rate < 2.0:
+                        st.warning(f"**{loc}**: Vacancy rate {rate:.1f}% - Tight market (demand > supply)")
+                    elif rate < 3.0:
+                        st.info(f"**{loc}**: Vacancy rate {rate:.1f}% - Balanced market")
+                    else:
+                        st.success(f"**{loc}**: Vacancy rate {rate:.1f}% - Oversupply (supply > demand)")
+
+            dom = supply_df[supply_df['metric_name'] == 'days_on_market']
+            if not dom.empty:
+                st.markdown("#### Days on Market (Demand Pressure)")
+                latest_dom = dom.sort_values('date').groupby('location').last()
+                for loc, row in latest_dom.iterrows():
+                    days = row['value']
+                    if days < 20:
+                        st.error(f"**{loc}**: {days:.0f} days - Extremely hot (sellers' market)")
+                    elif days < 35:
+                        st.warning(f"**{loc}**: {days:.0f} days - Strong demand")
+                    elif days < 60:
+                        st.info(f"**{loc}**: {days:.0f} days - Balanced")
+                    else:
+                        st.success(f"**{loc}**: {days:.0f} days - Buyers' market")
+
+        if not migration_df.empty:
+            st.markdown("#### Population-Driven Demand")
+            migration_df['date'] = pd.to_datetime(migration_df['date'])
+            migration_df['net_migration'] = (
+                migration_df['interstate_migration'].fillna(0) +
+                migration_df['overseas_migration'].fillna(0)
+            )
+            latest_mig = migration_df.sort_values('date').groupby('state').last()
+            for state_name, row in latest_mig.iterrows():
+                net = row['net_migration']
+                if net > 10000:
+                    st.warning(f"**{state_name}**: Net migration +{net:,.0f} - High demand pressure")
+                elif net > 0:
+                    st.info(f"**{state_name}**: Net migration +{net:,.0f} - Moderate demand")
+                else:
+                    st.success(f"**{state_name}**: Net migration {net:,.0f} - Easing demand")
+
+        # Pipeline visualization
+        st.markdown("#### Supply Pipeline")
+        st.markdown("Add `building_approvals`, `housing_supply`, and `listings_count` metrics "
+                    "to the Property Data table to see the full supply pipeline.")
+    else:
+        st.info("No supply/demand data yet. This module uses data from:")
+        st.markdown("""
+        - **Property Data** table: `building_approvals`, `dwellings_approved`, `housing_supply`,
+          `days_on_market`, `listings_count`, `auction_clearance_rate`, `rental_vacancy_rate`
+        - **Migration Data** table: population growth as a demand proxy
+
+        Add these metrics via **Data Management** or the **Migration Monitor** tab.
+        """)
+
+
+def calculate_supply_demand_score(conn, location):
+    """Score based on supply/demand balance (0-10). Undersupply = higher score (growth potential)."""
+    is_pg = is_postgres(conn)
+    score = 5.0  # Neutral start
+
+    try:
+        # Check vacancy rate
+        vacancy_df = pd.read_sql_query("""
+            SELECT value FROM property_data
+            WHERE location = {} AND metric_name = 'rental_vacancy_rate'
+            ORDER BY date DESC LIMIT 1
+        """.format("%s" if is_pg else "?"), conn, params=(location,))
+
+        if not vacancy_df.empty:
+            vacancy = vacancy_df.iloc[0]['value']
+            if vacancy < 1.0:
+                score += 3.0
+            elif vacancy < 2.0:
+                score += 2.0
+            elif vacancy < 3.0:
+                score += 0.5
+            else:
+                score -= 2.0
+
+        # Check days on market
+        dom_df = pd.read_sql_query("""
+            SELECT value FROM property_data
+            WHERE location = {} AND metric_name = 'days_on_market'
+            ORDER BY date DESC LIMIT 1
+        """.format("%s" if is_pg else "?"), conn, params=(location,))
+
+        if not dom_df.empty:
+            dom = dom_df.iloc[0]['value']
+            if dom < 20:
+                score += 2.0
+            elif dom < 35:
+                score += 1.0
+            elif dom > 60:
+                score -= 1.5
+    except Exception:
+        pass
+
+    return max(0.0, min(10.0, round(score, 1)))
+
+
+# -------------------- 5. SUBURB SCORER --------------------
+
+def show_suburb_scorer():
+    """Score and rank suburbs by all leading indicators"""
+    st.subheader("🏆 Multi-Indicator Suburb Scorer")
+    st.markdown("Combines all leading indicators into a single score (0-50) to identify "
+                "the best suburbs for investment.")
+
+    st.markdown("""
+    | Category | Max Score | What It Measures |
+    |----------|-----------|-----------------|
+    | Infrastructure | /10 | Nearby projects & investment |
+    | Population | /10 | Migration & population growth |
+    | Employment | /10 | Jobs growth & unemployment |
+    | Supply/Demand | /10 | Housing shortage signals |
+    | Credit | /5 | Lending conditions |
+    | Gentrification | /5 | Demographic shifts & renewal |
+    | **Total** | **/50** | **Overall growth potential** |
+    """)
+
+    st.markdown("---")
+
+    tab1, tab2 = st.tabs(["Leaderboard", "Score a Suburb"])
+
+    with tab1:
+        conn = get_db_connection()
+        try:
+            scores_df = pd.read_sql_query("""
+                SELECT suburb, state, infrastructure_score, population_score,
+                       employment_score, supply_demand_score, credit_score,
+                       gentrification_score, total_score, rank, date
+                FROM suburb_scores
+                ORDER BY total_score DESC, date DESC
+            """, conn)
+        except Exception:
+            scores_df = pd.DataFrame()
+        conn.close()
+
+        if not scores_df.empty:
+            # Get latest scores per suburb
+            scores_df['date'] = pd.to_datetime(scores_df['date'])
+            latest = scores_df.sort_values('date').groupby(['suburb', 'state']).last().reset_index()
+            latest = latest.sort_values('total_score', ascending=False).reset_index(drop=True)
+            latest.index = latest.index + 1  # 1-based rank
+
+            st.markdown("#### Suburb Rankings")
+
+            # Highlight top performers
+            if len(latest) >= 3:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    top = latest.iloc[0]
+                    st.metric(f"#1 {top['suburb']}, {top['state']}", f"{top['total_score']:.1f}/50")
+                with col2:
+                    second = latest.iloc[1]
+                    st.metric(f"#2 {second['suburb']}, {second['state']}", f"{second['total_score']:.1f}/50")
+                with col3:
+                    third = latest.iloc[2]
+                    st.metric(f"#3 {third['suburb']}, {third['state']}", f"{third['total_score']:.1f}/50")
+
+            # Full table
+            display_cols = ['suburb', 'state', 'infrastructure_score', 'population_score',
+                           'employment_score', 'supply_demand_score', 'credit_score',
+                           'gentrification_score', 'total_score']
+            st.dataframe(latest[display_cols], use_container_width=True)
+
+            # Radar chart for selected suburb
+            st.markdown("#### Score Breakdown")
+            suburb_options = [f"{row['suburb']}, {row['state']}" for _, row in latest.iterrows()]
+            selected = st.selectbox("Select suburb", suburb_options, key="scorer_suburb_select")
+            if selected:
+                parts = selected.rsplit(', ', 1)
+                suburb_name, state_name = parts[0], parts[1]
+                row = latest[(latest['suburb'] == suburb_name) & (latest['state'] == state_name)].iloc[0]
+
+                import plotly.graph_objects as go
+                categories = ['Infrastructure', 'Population', 'Employment',
+                             'Supply/Demand', 'Credit', 'Gentrification']
+                values = [
+                    row.get('infrastructure_score', 0) or 0,
+                    row.get('population_score', 0) or 0,
+                    row.get('employment_score', 0) or 0,
+                    row.get('supply_demand_score', 0) or 0,
+                    (row.get('credit_score', 0) or 0) * 2,  # Scale /5 to /10 for radar
+                    (row.get('gentrification_score', 0) or 0) * 2  # Scale /5 to /10 for radar
+                ]
+
+                fig = go.Figure(data=go.Scatterpolar(
+                    r=values + [values[0]],
+                    theta=categories + [categories[0]],
+                    fill='toself',
+                    name=selected
+                ))
+                fig.update_layout(
+                    polar=dict(radialaxis=dict(visible=True, range=[0, 10])),
+                    title=f"Score Breakdown: {selected}",
+                    showlegend=False
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Recommendations
+                st.markdown("#### Recommendations")
+                total = row['total_score'] or 0
+                if total >= 40:
+                    st.success(f"**{selected}** scores {total:.1f}/50 - Strong growth potential. "
+                              "Multiple indicators align for above-average returns.")
+                elif total >= 30:
+                    st.info(f"**{selected}** scores {total:.1f}/50 - Moderate growth potential. "
+                           "Some positive indicators but watch for weaknesses.")
+                elif total >= 20:
+                    st.warning(f"**{selected}** scores {total:.1f}/50 - Below average. "
+                              "Limited growth catalysts present.")
+                else:
+                    st.error(f"**{selected}** scores {total:.1f}/50 - Weak growth outlook. "
+                            "Few positive indicators detected.")
+
+                # Identify weakest area
+                score_map = {
+                    'Infrastructure': row.get('infrastructure_score', 0) or 0,
+                    'Population': row.get('population_score', 0) or 0,
+                    'Employment': row.get('employment_score', 0) or 0,
+                    'Supply/Demand': row.get('supply_demand_score', 0) or 0,
+                }
+                weakest = min(score_map, key=score_map.get)
+                st.caption(f"Weakest area: **{weakest}** ({score_map[weakest]:.1f}/10) - "
+                          "improving this factor would have the biggest impact on the total score.")
+
+            # Alerts: suburbs crossing thresholds
+            st.markdown("#### Score Alerts")
+            high_scorers = latest[latest['total_score'] >= 35]
+            if not high_scorers.empty:
+                for _, row in high_scorers.iterrows():
+                    st.success(f"**{row['suburb']}, {row['state']}** - Score {row['total_score']:.1f}/50 "
+                              "- High growth potential")
+            else:
+                st.info("No suburbs currently scoring above 35/50.")
+        else:
+            st.info("No suburb scores calculated yet. Use the **Score a Suburb** tab to calculate scores.")
+
+    with tab2:
+        st.markdown("#### Calculate Suburb Score")
+        st.markdown("Enter a suburb to calculate its score based on all available leading indicator data.")
+
+        with st.form("score_suburb", clear_on_submit=False):
+            col1, col2 = st.columns(2)
+            with col1:
+                score_suburb = st.text_input("Suburb Name *", key="score_suburb_input")
+            with col2:
+                score_state = st.selectbox("State *",
+                    ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"], key="score_state_input")
+
+            col3, col4 = st.columns(2)
+            with col3:
+                manual_credit = st.number_input("Credit Score (0-5)", min_value=0.0, max_value=5.0,
+                                                value=2.5, step=0.5, key="manual_credit",
+                                                help="Rate lending conditions: 5=very easy credit, 0=very tight")
+            with col4:
+                manual_gentrify = st.number_input("Gentrification Score (0-5)", min_value=0.0, max_value=5.0,
+                                                  value=2.5, step=0.5, key="manual_gentrify",
+                                                  help="Rate demographic change: 5=strong gentrification, 0=none")
+
+            if st.form_submit_button("Calculate Score"):
+                if not score_suburb:
+                    st.error("Suburb name is required.")
+                else:
+                    conn = get_db_connection()
+
+                    infra_score = calculate_infrastructure_score(conn, score_suburb, score_state)
+                    pop_score = calculate_population_score(conn, score_state)
+                    emp_score = calculate_employment_score(conn, score_state)
+                    sd_score = calculate_supply_demand_score(conn, score_suburb)
+
+                    total = infra_score + pop_score + emp_score + sd_score + manual_credit + manual_gentrify
+
+                    # Save to database
+                    cursor = conn.cursor()
+                    ph = "%s" if is_postgres(conn) else "?"
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    try:
+                        if is_postgres(conn):
+                            cursor.execute(f"""
+                                INSERT INTO suburb_scores (date, suburb, state, infrastructure_score,
+                                    population_score, employment_score, supply_demand_score,
+                                    credit_score, gentrification_score, total_score)
+                                VALUES ({','.join([ph]*10)})
+                                ON CONFLICT (date, suburb, state) DO UPDATE SET
+                                    infrastructure_score = EXCLUDED.infrastructure_score,
+                                    population_score = EXCLUDED.population_score,
+                                    employment_score = EXCLUDED.employment_score,
+                                    supply_demand_score = EXCLUDED.supply_demand_score,
+                                    credit_score = EXCLUDED.credit_score,
+                                    gentrification_score = EXCLUDED.gentrification_score,
+                                    total_score = EXCLUDED.total_score
+                            """, (today, score_suburb, score_state, infra_score, pop_score,
+                                  emp_score, sd_score, manual_credit, manual_gentrify, total))
+                        else:
+                            cursor.execute(f"""
+                                INSERT OR REPLACE INTO suburb_scores (date, suburb, state,
+                                    infrastructure_score, population_score, employment_score,
+                                    supply_demand_score, credit_score, gentrification_score, total_score)
+                                VALUES ({','.join([ph]*10)})
+                            """, (today, score_suburb, score_state, infra_score, pop_score,
+                                  emp_score, sd_score, manual_credit, manual_gentrify, total))
+                        conn.commit()
+                    except Exception as e:
+                        st.warning(f"Could not save score: {e}")
+                    finally:
+                        conn.close()
+
+                    # Display results
+                    st.markdown(f"### Score: {total:.1f} / 50")
+
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Infrastructure", f"{infra_score:.1f}/10")
+                        st.metric("Population", f"{pop_score:.1f}/10")
+                    with col2:
+                        st.metric("Employment", f"{emp_score:.1f}/10")
+                        st.metric("Supply/Demand", f"{sd_score:.1f}/10")
+                    with col3:
+                        st.metric("Credit", f"{manual_credit:.1f}/5")
+                        st.metric("Gentrification", f"{manual_gentrify:.1f}/5")
+
+                    # Rating
+                    if total >= 40:
+                        st.success(f"**{score_suburb}, {score_state}** - Excellent growth potential!")
+                    elif total >= 30:
+                        st.info(f"**{score_suburb}, {score_state}** - Good growth potential")
+                    elif total >= 20:
+                        st.warning(f"**{score_suburb}, {score_state}** - Average outlook")
+                    else:
+                        st.error(f"**{score_suburb}, {score_state}** - Below average outlook")
+
+
 if __name__ == "__main__":
     main()

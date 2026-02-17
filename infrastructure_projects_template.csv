@@ -1,0 +1,5 @@
+project_name,project_type,location,state,status,budget_millions,announcement_date,construction_start_date,expected_completion_date,latitude,longitude,impact_radius_km,source,notes
+Sydney Metro West,rail,Sydney,NSW,construction,25000,2020-11-01,2022-06-01,2030-12-31,-33.8688,151.2093,10.0,NSW Government,Western Sydney to CBD metro line
+Cross River Rail,rail,Brisbane,QLD,construction,5400,2017-06-01,2020-07-01,2026-06-30,-27.4698,153.0251,5.0,QLD Government,Underground rail through Brisbane CBD
+Suburban Rail Loop,rail,Melbourne,VIC,construction,34500,2018-10-01,2022-11-01,2035-12-31,-37.8136,144.9631,8.0,VIC Government,Orbital rail connecting Melbourne suburbs
+Western Sydney Airport,airport,Badgerys Creek,NSW,construction,5300,2018-03-01,2018-09-01,2026-12-31,-33.8816,150.7506,15.0,Federal Government,Second Sydney airport
