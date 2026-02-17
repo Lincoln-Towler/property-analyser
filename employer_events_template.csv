@@ -1,0 +1,6 @@
+date,employer_name,event_type,location,jobs_impact,industry,source,notes
+2024-09-15,Google,expansion,Sydney,500,Technology,News article,New office expansion in Pyrmont
+2024-10-01,BHP,new_facility,Perth,1200,Mining,BHP announcement,New processing facility
+2024-08-20,Amazon,new_facility,Melbourne,800,Logistics,Amazon press release,New fulfilment centre in western suburbs
+2024-11-01,Qantas,expansion,Brisbane,350,Aviation,Qantas media,Expanded maintenance hub
+2024-07-15,Holden,closure,Adelaide,-600,Manufacturing,News report,Factory closure affecting local employment
