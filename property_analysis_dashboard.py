@@ -2649,18 +2649,27 @@ def show_data_management():
     
     with tab2:
         st.subheader("CSV Import")
-        
+
         st.markdown("""
         Upload CSV files with the following formats:
-        
+
         **Economic Indicators:** date, indicator_name, value, source
-        
+
         **Property Data:** date, location, metric_name, value, source
+
+        **Infrastructure Projects:** project_name, project_type, location, state (+ optional fields)
+
+        **Migration Data:** date, state (+ optional migration fields)
+
+        **Employment Data:** date, region (+ optional employment fields)
+
+        **Employer Events:** date, employer_name, event_type, location (+ optional fields)
         """)
-        
+
         data_type_csv = st.radio(
             "CSV Data Type",
-            ["Economic Indicators", "Property Data"],
+            ["Economic Indicators", "Property Data", "Infrastructure Projects",
+             "Migration Data", "Employment Data", "Employer Events"],
             horizontal=True
         )
         
@@ -2726,24 +2735,144 @@ def show_data_management():
                                     skipped_count += 1
                                     skipped.append(f"Row {idx + 2}: Missing required field(s)")
                                     continue
-                                
+
                                 try:
                                     # Use default source if missing
                                     source = row['source'] if pd.notna(row['source']) else 'CSV Import'
-                                    
+
                                     cursor.execute("""
                                         INSERT INTO property_data (date, location, metric_name, value, source)
                                         VALUES (%s, %s, %s, %s, %s)
-                                        ON CONFLICT (date, location, metric_name) 
+                                        ON CONFLICT (date, location, metric_name)
                                         DO UPDATE SET value = EXCLUDED.value, source = EXCLUDED.source
                                     """, (row['date'], row['location'], row['metric_name'], float(row['value']), source))
                                     success_count += 1
                                 except Exception as e:
                                     error_count += 1
                                     errors.append(f"Row {idx + 2}: {str(e)}")
-                            
+
                             conn.commit()
-                    
+
+                    elif data_type_csv == "Infrastructure Projects":
+                        required_cols = ['project_name', 'project_type', 'location', 'state']
+                        if not all(col in df.columns for col in required_cols):
+                            st.error(f"CSV must have columns: {required_cols}")
+                        else:
+                            infra_cols = ['project_name', 'project_type', 'location', 'state', 'status',
+                                          'budget_millions', 'announcement_date', 'construction_start_date',
+                                          'expected_completion_date', 'latitude', 'longitude',
+                                          'impact_radius_km', 'source', 'notes']
+                            for idx, row in df.iterrows():
+                                if pd.isna(row['project_name']) or pd.isna(row['location']):
+                                    skipped_count += 1
+                                    skipped.append(f"Row {idx + 2}: Missing required field(s)")
+                                    continue
+                                try:
+                                    vals = (
+                                        row['project_name'], row['project_type'], row['location'], row['state'],
+                                        row.get('status', 'announced'),
+                                        row.get('budget_millions', None),
+                                        row.get('announcement_date', None),
+                                        row.get('construction_start_date', None),
+                                        row.get('expected_completion_date', None),
+                                        row.get('latitude', None),
+                                        row.get('longitude', None),
+                                        row.get('impact_radius_km', 5.0),
+                                        row.get('source', 'CSV Import'),
+                                        row.get('notes', None)
+                                    )
+                                    db_upsert(cursor, conn, 'infrastructure_projects', infra_cols, vals)
+                                    success_count += 1
+                                except Exception as e:
+                                    error_count += 1
+                                    errors.append(f"Row {idx + 2}: {str(e)}")
+                            conn.commit()
+
+                    elif data_type_csv == "Migration Data":
+                        required_cols = ['date', 'state']
+                        if not all(col in df.columns for col in required_cols):
+                            st.error(f"CSV must have columns: {required_cols}")
+                        else:
+                            mig_cols = ['date', 'state', 'interstate_migration', 'overseas_migration',
+                                        'international_students', 'total_population', 'source']
+                            for idx, row in df.iterrows():
+                                if pd.isna(row['date']) or pd.isna(row['state']):
+                                    skipped_count += 1
+                                    skipped.append(f"Row {idx + 2}: Missing required field(s)")
+                                    continue
+                                try:
+                                    vals = (
+                                        row['date'], row['state'],
+                                        row.get('interstate_migration', None),
+                                        row.get('overseas_migration', None),
+                                        row.get('international_students', None),
+                                        row.get('total_population', None),
+                                        row.get('source', 'CSV Import')
+                                    )
+                                    db_upsert(cursor, conn, 'migration_data', mig_cols, vals,
+                                              conflict_cols=['date', 'state'])
+                                    success_count += 1
+                                except Exception as e:
+                                    error_count += 1
+                                    errors.append(f"Row {idx + 2}: {str(e)}")
+                            conn.commit()
+
+                    elif data_type_csv == "Employment Data":
+                        required_cols = ['date', 'region']
+                        if not all(col in df.columns for col in required_cols):
+                            st.error(f"CSV must have columns: {required_cols}")
+                        else:
+                            emp_cols = ['date', 'region', 'total_employed', 'unemployment_rate',
+                                        'job_ads_count', 'employment_growth_rate', 'source']
+                            for idx, row in df.iterrows():
+                                if pd.isna(row['date']) or pd.isna(row['region']):
+                                    skipped_count += 1
+                                    skipped.append(f"Row {idx + 2}: Missing required field(s)")
+                                    continue
+                                try:
+                                    vals = (
+                                        row['date'], row['region'],
+                                        row.get('total_employed', None),
+                                        row.get('unemployment_rate', None),
+                                        row.get('job_ads_count', None),
+                                        row.get('employment_growth_rate', None),
+                                        row.get('source', 'CSV Import')
+                                    )
+                                    db_upsert(cursor, conn, 'employment_data', emp_cols, vals,
+                                              conflict_cols=['date', 'region'])
+                                    success_count += 1
+                                except Exception as e:
+                                    error_count += 1
+                                    errors.append(f"Row {idx + 2}: {str(e)}")
+                            conn.commit()
+
+                    elif data_type_csv == "Employer Events":
+                        required_cols = ['date', 'employer_name', 'event_type', 'location']
+                        if not all(col in df.columns for col in required_cols):
+                            st.error(f"CSV must have columns: {required_cols}")
+                        else:
+                            ev_cols = ['date', 'employer_name', 'event_type', 'location',
+                                       'jobs_impact', 'industry', 'source', 'notes']
+                            for idx, row in df.iterrows():
+                                if pd.isna(row['date']) or pd.isna(row['employer_name']):
+                                    skipped_count += 1
+                                    skipped.append(f"Row {idx + 2}: Missing required field(s)")
+                                    continue
+                                try:
+                                    vals = (
+                                        row['date'], row['employer_name'], row['event_type'], row['location'],
+                                        row.get('jobs_impact', None),
+                                        row.get('industry', None),
+                                        row.get('source', 'CSV Import'),
+                                        row.get('notes', None)
+                                    )
+                                    db_upsert(cursor, conn, 'employer_events', ev_cols, vals)
+                                    success_count += 1
+                                except Exception as e:
+                                    error_count += 1
+                                    errors.append(f"Row {idx + 2}: {str(e)}")
+                            conn.commit()
+
                     conn.close()
                     
                     # Show results
@@ -2785,7 +2914,9 @@ def show_data_management():
     with tab3:
         st.subheader("View & Edit Current Data")
         
-        view_type = st.selectbox("Select Data Type", ["Economic Indicators", "Property Data"])
+        view_type = st.selectbox("Select Data Type",
+            ["Economic Indicators", "Property Data", "Infrastructure Projects",
+             "Migration Data", "Employment Data", "Employer Events", "Suburb Scores"])
         
         conn = get_db_connection()
         
@@ -2909,7 +3040,7 @@ def show_data_management():
             else:
                 st.info("No economic indicator data yet. Add data using the Manual Entry tab.")
         
-        else:  # Property Data
+        elif view_type == "Property Data":
             df = pd.read_sql_query("""
                 SELECT id, date, location, metric_name, value, source 
                 FROM property_data 
@@ -3020,7 +3151,219 @@ def show_data_management():
                                     st.error(f"Error deleting: {e}")
             else:
                 st.info("No property data yet. Add data using the Manual Entry tab.")
-        
+
+        elif view_type == "Infrastructure Projects":
+            try:
+                df = pd.read_sql_query("""
+                    SELECT id, project_name, project_type, location, state, status,
+                           budget_millions, announcement_date, expected_completion_date, source
+                    FROM infrastructure_projects ORDER BY announcement_date DESC
+                """, conn)
+            except Exception:
+                df = pd.DataFrame()
+
+            if not df.empty:
+                st.markdown("### Infrastructure Projects")
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+                st.subheader("Delete Entry")
+                entries = []
+                for _, row in df.iterrows():
+                    display = f"{row['project_name']} - {row['location']}, {row['state']} ({row['status']}) (ID: {row['id']})"
+                    entries.append((row['id'], display))
+                selected = st.selectbox("Select entry to delete", [e[1] for e in entries], key="infra_del_select")
+                if selected:
+                    selected_id = [e[0] for e in entries if e[1] == selected][0]
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        if st.button("🗑️ Delete Entry", key="delete_infra"):
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM infrastructure_projects WHERE id = %s", (selected_id,))
+                            conn.commit()
+                            st.success("Deleted entry")
+                            st.rerun()
+
+                st.markdown("---")
+                if st.button("🗑️ Clear All Infrastructure Projects", key="clear_infra"):
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM infrastructure_projects")
+                    conn.commit()
+                    st.success("All infrastructure projects deleted")
+                    st.rerun()
+            else:
+                st.info("No infrastructure projects yet.")
+
+        elif view_type == "Migration Data":
+            try:
+                df = pd.read_sql_query("""
+                    SELECT id, date, state, interstate_migration, overseas_migration,
+                           international_students, total_population, source
+                    FROM migration_data ORDER BY date DESC, state
+                """, conn)
+            except Exception:
+                df = pd.DataFrame()
+
+            if not df.empty:
+                st.markdown("### Migration Data")
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+                st.subheader("Delete Entry")
+                entries = []
+                for _, row in df.iterrows():
+                    display = f"{row['date']} - {row['state']} (ID: {row['id']})"
+                    entries.append((row['id'], display))
+                selected = st.selectbox("Select entry to delete", [e[1] for e in entries], key="mig_del_select")
+                if selected:
+                    selected_id = [e[0] for e in entries if e[1] == selected][0]
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        if st.button("🗑️ Delete Entry", key="delete_mig"):
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM migration_data WHERE id = %s", (selected_id,))
+                            conn.commit()
+                            st.success("Deleted entry")
+                            st.rerun()
+
+                st.markdown("---")
+                if st.button("🗑️ Clear All Migration Data", key="clear_mig"):
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM migration_data")
+                    conn.commit()
+                    st.success("All migration data deleted")
+                    st.rerun()
+            else:
+                st.info("No migration data yet.")
+
+        elif view_type == "Employment Data":
+            try:
+                df = pd.read_sql_query("""
+                    SELECT id, date, region, total_employed, unemployment_rate,
+                           job_ads_count, employment_growth_rate, source
+                    FROM employment_data ORDER BY date DESC, region
+                """, conn)
+            except Exception:
+                df = pd.DataFrame()
+
+            if not df.empty:
+                st.markdown("### Employment Data")
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+                st.subheader("Delete Entry")
+                entries = []
+                for _, row in df.iterrows():
+                    display = f"{row['date']} - {row['region']} (ID: {row['id']})"
+                    entries.append((row['id'], display))
+                selected = st.selectbox("Select entry to delete", [e[1] for e in entries], key="emp_del_select")
+                if selected:
+                    selected_id = [e[0] for e in entries if e[1] == selected][0]
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        if st.button("🗑️ Delete Entry", key="delete_emp"):
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM employment_data WHERE id = %s", (selected_id,))
+                            conn.commit()
+                            st.success("Deleted entry")
+                            st.rerun()
+
+                st.markdown("---")
+                if st.button("🗑️ Clear All Employment Data", key="clear_emp"):
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM employment_data")
+                    conn.commit()
+                    st.success("All employment data deleted")
+                    st.rerun()
+            else:
+                st.info("No employment data yet.")
+
+        elif view_type == "Employer Events":
+            try:
+                df = pd.read_sql_query("""
+                    SELECT id, date, employer_name, event_type, location,
+                           jobs_impact, industry, source, notes
+                    FROM employer_events ORDER BY date DESC
+                """, conn)
+            except Exception:
+                df = pd.DataFrame()
+
+            if not df.empty:
+                st.markdown("### Employer Events")
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+                st.subheader("Delete Entry")
+                entries = []
+                for _, row in df.iterrows():
+                    impact = row.get('jobs_impact', 0) or 0
+                    display = f"{row['date']} - {row['employer_name']} ({row['event_type']}, {impact:+,} jobs) (ID: {row['id']})"
+                    entries.append((row['id'], display))
+                selected = st.selectbox("Select entry to delete", [e[1] for e in entries], key="ev_del_select")
+                if selected:
+                    selected_id = [e[0] for e in entries if e[1] == selected][0]
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        if st.button("🗑️ Delete Entry", key="delete_ev"):
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM employer_events WHERE id = %s", (selected_id,))
+                            conn.commit()
+                            st.success("Deleted entry")
+                            st.rerun()
+
+                st.markdown("---")
+                if st.button("🗑️ Clear All Employer Events", key="clear_ev"):
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM employer_events")
+                    conn.commit()
+                    st.success("All employer events deleted")
+                    st.rerun()
+            else:
+                st.info("No employer events yet.")
+
+        elif view_type == "Suburb Scores":
+            try:
+                df = pd.read_sql_query("""
+                    SELECT id, date, suburb, state, infrastructure_score, population_score,
+                           employment_score, supply_demand_score, credit_score,
+                           gentrification_score, total_score
+                    FROM suburb_scores ORDER BY total_score DESC, date DESC
+                """, conn)
+            except Exception:
+                df = pd.DataFrame()
+
+            if not df.empty:
+                st.markdown("### Suburb Scores")
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+                st.subheader("Delete Entry")
+                entries = []
+                for _, row in df.iterrows():
+                    display = f"{row['date']} - {row['suburb']}, {row['state']} = {row['total_score']:.1f}/50 (ID: {row['id']})"
+                    entries.append((row['id'], display))
+                selected = st.selectbox("Select entry to delete", [e[1] for e in entries], key="score_del_select")
+                if selected:
+                    selected_id = [e[0] for e in entries if e[1] == selected][0]
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        if st.button("🗑️ Delete Entry", key="delete_score"):
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM suburb_scores WHERE id = %s", (selected_id,))
+                            conn.commit()
+                            st.success("Deleted entry")
+                            st.rerun()
+
+                st.markdown("---")
+                if st.button("🗑️ Clear All Suburb Scores", key="clear_scores"):
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM suburb_scores")
+                    conn.commit()
+                    st.success("All suburb scores deleted")
+                    st.rerun()
+            else:
+                st.info("No suburb scores yet. Calculate scores in the Leading Indicators tab.")
+
         conn.close()
     
     with tab4:
