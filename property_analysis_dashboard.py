@@ -47,6 +47,33 @@ def is_postgres(conn):
     """Check if connection is PostgreSQL"""
     return isinstance(conn, psycopg2.extensions.connection)
 
+def economic_indicators_view(conn):
+    """Return SQL subquery that combines economic_indicators and economic_indicators_history.
+    Uses UNION to merge both tables, deduplicating by (date, indicator_name) keeping the latest value."""
+    if is_postgres(conn):
+        # Check if history table exists
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_name = 'economic_indicators_history'
+            )
+        """)
+        has_history = cursor.fetchone()[0]
+        if has_history:
+            return """(
+                SELECT DISTINCT ON (date, indicator_name)
+                    id, date, indicator_name, value, source, created_at
+                FROM (
+                    SELECT id, date, indicator_name, value, source, created_at FROM economic_indicators
+                    UNION ALL
+                    SELECT id, date, indicator_name, value, source, created_at FROM economic_indicators_history
+                ) combined
+                ORDER BY date, indicator_name, created_at DESC
+            ) AS economic_indicators"""
+    # Fallback: just the original table
+    return "economic_indicators"
+
 def get_ph(conn):
     """Return the SQL placeholder for this connection type"""
     return "%s" if is_postgres(conn) else "?"
@@ -321,15 +348,16 @@ def init_database():
     conn.close()
 
 def get_indicator_data(indicator_name, days=365):
-    """Fetch historical data for a specific indicator"""
+    """Fetch historical data for a specific indicator (includes history)"""
     conn = get_db_connection()
-    query = """
-        SELECT date, value 
-        FROM economic_indicators 
-        WHERE indicator_name = %s 
-        AND date >= date('now', '-{} days')
+    view = economic_indicators_view(conn)
+    query = f"""
+        SELECT date, value
+        FROM {view}
+        WHERE indicator_name = %s
+        AND date >= date('now', '-{days} days')
         ORDER BY date
-    """.format(days)
+    """
     df = pd.read_sql_query(query, conn, params=(indicator_name,))
     conn.close()
     return df
@@ -343,26 +371,27 @@ def get_indicator_trend(conn, indicator_name, months=3):
     """
     import psycopg2
     is_pg = isinstance(conn, psycopg2.extensions.connection)
-    
+    view = economic_indicators_view(conn)
+
     if is_pg:
-        query = """
-            SELECT date, value 
-            FROM economic_indicators 
-            WHERE indicator_name = %s 
-            AND date >= CURRENT_DATE - INTERVAL '{} months'
+        query = f"""
+            SELECT date, value
+            FROM {view}
+            WHERE indicator_name = %s
+            AND date >= CURRENT_DATE - INTERVAL '{months} months'
             ORDER BY date DESC
             LIMIT 2
-        """.format(months)
+        """
         params = (indicator_name,)
     else:
-        query = """
-            SELECT date, value 
-            FROM economic_indicators 
-            WHERE indicator_name = ? 
-            AND date >= date('now', '-{} months')
+        query = f"""
+            SELECT date, value
+            FROM {view}
+            WHERE indicator_name = ?
+            AND date >= date('now', '-{months} months')
             ORDER BY date DESC
             LIMIT 2
-        """.format(months)
+        """
         params = (indicator_name,)
     
     cursor = conn.cursor()
@@ -396,13 +425,13 @@ def calculate_market_score_v2(conn=None):
     """
     from datetime import datetime
     import psycopg2
-    
+
     if conn is None:
-        # Import get_db_connection if needed
         return 50, "No Connection", {}
-    
+
     is_pg = isinstance(conn, psycopg2.extensions.connection)
     cursor = conn.cursor()
+    ei_view = economic_indicators_view(conn)
     
     # PHASE 1: WEIGHTED INDICATORS CONFIGURATION
     indicators_config = {
@@ -506,18 +535,12 @@ def calculate_market_score_v2(conn=None):
     # PHASE 2: CALCULATE SCORE FOR EACH INDICATOR
     for indicator_name, config in indicators_config.items():
         # Get latest value
-        if is_pg:
-            cursor.execute("""
-                SELECT value, date FROM economic_indicators 
-                WHERE indicator_name = %s 
-                ORDER BY date DESC LIMIT 1
-            """, (indicator_name,))
-        else:
-            cursor.execute("""
-                SELECT value, date FROM economic_indicators 
-                WHERE indicator_name = ? 
-                ORDER BY date DESC LIMIT 1
-            """, (indicator_name,))
+        ph = "%s" if is_pg else "?"
+        cursor.execute(f"""
+            SELECT value, date FROM {ei_view}
+            WHERE indicator_name = {ph}
+            ORDER BY date DESC LIMIT 1
+        """, (indicator_name,))
         
         result = cursor.fetchone()
         
@@ -735,22 +758,23 @@ def calculate_volatility_penalty(conn, indicator_name, months=6):
     """
     import psycopg2
     is_pg = isinstance(conn, psycopg2.extensions.connection)
-    
+    ei_view = economic_indicators_view(conn)
+
     if is_pg:
-        query = """
-            SELECT value FROM economic_indicators 
-            WHERE indicator_name = %s 
-            AND date >= CURRENT_DATE - INTERVAL '{} months'
+        query = f"""
+            SELECT value FROM {ei_view}
+            WHERE indicator_name = %s
+            AND date >= CURRENT_DATE - INTERVAL '{months} months'
             ORDER BY date DESC
-        """.format(months)
+        """
         params = (indicator_name,)
     else:
-        query = """
-            SELECT value FROM economic_indicators 
-            WHERE indicator_name = ? 
-            AND date >= date('now', '-{} months')
+        query = f"""
+            SELECT value FROM {ei_view}
+            WHERE indicator_name = ?
+            AND date >= date('now', '-{months} months')
             ORDER BY date DESC
-        """.format(months)
+        """
         params = (indicator_name,)
     
     cursor = conn.cursor()
@@ -1282,12 +1306,13 @@ def show_dashboard():
     # Pull real metrics from database
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+    ei_view = economic_indicators_view(conn)
+
     def get_latest_indicator(indicator_name):
         """Get latest value and calculate change for an indicator"""
-        cursor.execute("""
-            SELECT value, date FROM economic_indicators 
-            WHERE indicator_name = %s 
+        cursor.execute(f"""
+            SELECT value, date FROM {ei_view}
+            WHERE indicator_name = %s
             ORDER BY date DESC LIMIT 2
         """, (indicator_name,))
         results = cursor.fetchall()
@@ -1903,11 +1928,12 @@ def show_economic_indicators():
     # Helper function to get latest indicator value
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+    ei_view = economic_indicators_view(conn)
+
     def get_indicator_value(indicator_name):
-        cursor.execute("""
-            SELECT value FROM economic_indicators 
-            WHERE indicator_name = %s 
+        cursor.execute(f"""
+            SELECT value FROM {ei_view}
+            WHERE indicator_name = %s
             ORDER BY date DESC LIMIT 1
         """, (indicator_name,))
         result = cursor.fetchone()
@@ -2058,7 +2084,8 @@ def show_economic_indicators():
     # Get available indicators from database
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT indicator_name FROM economic_indicators ORDER BY indicator_name")
+    ei_view = economic_indicators_view(conn)
+    cursor.execute(f"SELECT DISTINCT indicator_name FROM {ei_view} ORDER BY indicator_name")
     available_indicators = [row[0] for row in cursor.fetchall()]
     
     if available_indicators:
@@ -2088,10 +2115,10 @@ def show_economic_indicators():
         indicator_name = available_indicators[selected_idx]
         
         # Query historical data
-        query = """
-            SELECT date, value 
-            FROM economic_indicators 
-            WHERE indicator_name = %s 
+        query = f"""
+            SELECT date, value
+            FROM {ei_view}
+            WHERE indicator_name = %s
             ORDER BY date
         """
         df = pd.read_sql_query(query, conn, params=(indicator_name,))
@@ -2921,9 +2948,10 @@ def show_data_management():
         conn = get_db_connection()
         
         if view_type == "Economic Indicators":
-            df = pd.read_sql_query("""
-                SELECT id, date, indicator_name, value, source 
-                FROM economic_indicators 
+            ei_view = economic_indicators_view(conn)
+            df = pd.read_sql_query(f"""
+                SELECT id, date, indicator_name, value, source
+                FROM {ei_view}
                 ORDER BY date DESC, indicator_name
             """, conn)
             
@@ -3377,7 +3405,8 @@ def show_data_management():
         conn = get_db_connection()
         
         # Get all data for summary
-        economic_df = pd.read_sql_query("SELECT * FROM economic_indicators ORDER BY date DESC", conn)
+        ei_view = economic_indicators_view(conn)
+        economic_df = pd.read_sql_query(f"SELECT * FROM {ei_view} ORDER BY date DESC", conn)
         property_df = pd.read_sql_query("SELECT * FROM property_data ORDER BY date DESC", conn)
         
         # Get commentary
