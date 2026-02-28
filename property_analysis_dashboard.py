@@ -91,11 +91,18 @@ def economic_indicators_view(conn):
     # Standard: id, date, indicator_name, value, source, created_at
     std_cols = ['id', 'date', 'indicator_name', 'value', 'source', 'created_at']
 
+    # Known column aliases: history table may use different names
+    col_aliases = {
+        'created_at': 'recorded_at',  # history uses recorded_at instead of created_at
+    }
+
     # Build the history SELECT, mapping columns that exist
     hist_select_parts = []
     for col in std_cols:
         if col in hist_cols:
             hist_select_parts.append(col)
+        elif col in col_aliases and col_aliases[col] in hist_cols:
+            hist_select_parts.append(f"{col_aliases[col]} AS {col}")
         elif col == 'source':
             hist_select_parts.append("'n8n automation' AS source")
         elif col == 'created_at':
