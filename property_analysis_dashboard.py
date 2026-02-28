@@ -47,28 +47,17 @@ def is_postgres(conn):
     """Check if connection is PostgreSQL"""
     return isinstance(conn, psycopg2.extensions.connection)
 
-def _check_history_columns(conn):
-    """Check what columns economic_indicators_history has and return matching SELECT lists."""
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT column_name FROM information_schema.columns
-        WHERE table_name = 'economic_indicators_history'
-        ORDER BY ordinal_position
-    """)
-    hist_cols = [row[0] for row in cursor.fetchall()]
-    return hist_cols
-
 _ei_view_created = False
 
 def economic_indicators_view(conn):
     """Return the table/view name that combines economic_indicators and economic_indicators_history.
-    Creates a PostgreSQL VIEW on first call if the history table exists."""
+    Creates a PostgreSQL VIEW on first call if the history table exists.
+    Only uses columns guaranteed to exist in both tables: date, indicator_name, value."""
     global _ei_view_created
 
     if not is_postgres(conn):
         return "economic_indicators"
 
-    # If we already created the view this session, just return the name
     if _ei_view_created:
         return "economic_indicators_combined"
 
@@ -84,46 +73,54 @@ def economic_indicators_view(conn):
     if not cursor.fetchone()[0]:
         return "economic_indicators"
 
-    # Create or replace a view that merges both tables
-    hist_cols = _check_history_columns(conn)
+    # Check what columns exist in each table
+    cursor.execute("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'economic_indicators' ORDER BY ordinal_position
+    """)
+    main_cols = {row[0] for row in cursor.fetchall()}
 
-    # Map history columns to the standard columns we need
-    # Standard: id, date, indicator_name, value, source, created_at
-    std_cols = ['id', 'date', 'indicator_name', 'value', 'source', 'created_at']
+    cursor.execute("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'economic_indicators_history' ORDER BY ordinal_position
+    """)
+    hist_cols = {row[0] for row in cursor.fetchall()}
 
-    # Known column aliases: history table may use different names
-    col_aliases = {
-        'created_at': 'recorded_at',  # history uses recorded_at instead of created_at
-    }
+    # Build SELECT lists using only columns that exist, with safe defaults for missing ones
+    # The view needs: id, date, indicator_name, value, source
+    def col_or_default(col, cols, default):
+        return col if col in cols else f"{default} AS {col}"
 
-    # Build the history SELECT, mapping columns that exist
-    hist_select_parts = []
-    for col in std_cols:
-        if col in hist_cols:
-            hist_select_parts.append(col)
-        elif col in col_aliases and col_aliases[col] in hist_cols:
-            hist_select_parts.append(f"{col_aliases[col]} AS {col}")
-        elif col == 'source':
-            hist_select_parts.append("'n8n automation' AS source")
-        elif col == 'created_at':
-            hist_select_parts.append("NOW() AS created_at")
-        else:
-            hist_select_parts.append(f"NULL AS {col}")
+    main_parts = [
+        col_or_default('id', main_cols, '0'),
+        col_or_default('date', main_cols, 'NULL'),
+        col_or_default('indicator_name', main_cols, 'NULL'),
+        col_or_default('value', main_cols, 'NULL'),
+        col_or_default('source', main_cols, "'Manual Entry'"),
+    ]
 
-    hist_select = ', '.join(hist_select_parts)
-    main_select = ', '.join(std_cols)
+    hist_parts = [
+        col_or_default('id', hist_cols, '0'),
+        col_or_default('date', hist_cols, 'NULL'),
+        col_or_default('indicator_name', hist_cols, 'NULL'),
+        col_or_default('value', hist_cols, 'NULL'),
+        col_or_default('source', hist_cols, "'n8n automation'"),
+    ]
+
+    main_select = ', '.join(main_parts)
+    hist_select = ', '.join(hist_parts)
 
     try:
         cursor.execute(f"""
             CREATE OR REPLACE VIEW economic_indicators_combined AS
             SELECT DISTINCT ON (date, indicator_name)
-                {main_select}
+                id, date, indicator_name, value, source
             FROM (
                 SELECT {main_select} FROM economic_indicators
                 UNION ALL
                 SELECT {hist_select} FROM economic_indicators_history
             ) combined
-            ORDER BY date, indicator_name, created_at DESC
+            ORDER BY date, indicator_name, id DESC
         """)
         conn.commit()
         _ei_view_created = True
