@@ -47,32 +47,90 @@ def is_postgres(conn):
     """Check if connection is PostgreSQL"""
     return isinstance(conn, psycopg2.extensions.connection)
 
+def _check_history_columns(conn):
+    """Check what columns economic_indicators_history has and return matching SELECT lists."""
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'economic_indicators_history'
+        ORDER BY ordinal_position
+    """)
+    hist_cols = [row[0] for row in cursor.fetchall()]
+    return hist_cols
+
+_ei_view_created = False
+
 def economic_indicators_view(conn):
-    """Return SQL subquery that combines economic_indicators and economic_indicators_history.
-    Uses UNION to merge both tables, deduplicating by (date, indicator_name) keeping the latest value."""
-    if is_postgres(conn):
-        # Check if history table exists
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT EXISTS (
-                SELECT 1 FROM information_schema.tables
-                WHERE table_name = 'economic_indicators_history'
-            )
+    """Return the table/view name that combines economic_indicators and economic_indicators_history.
+    Creates a PostgreSQL VIEW on first call if the history table exists."""
+    global _ei_view_created
+
+    if not is_postgres(conn):
+        return "economic_indicators"
+
+    # If we already created the view this session, just return the name
+    if _ei_view_created:
+        return "economic_indicators_combined"
+
+    cursor = conn.cursor()
+
+    # Check if history table exists
+    cursor.execute("""
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_name = 'economic_indicators_history'
+        )
+    """)
+    if not cursor.fetchone()[0]:
+        return "economic_indicators"
+
+    # Create or replace a view that merges both tables
+    hist_cols = _check_history_columns(conn)
+
+    # Map history columns to the standard columns we need
+    # Standard: id, date, indicator_name, value, source, created_at
+    std_cols = ['id', 'date', 'indicator_name', 'value', 'source', 'created_at']
+
+    # Known column aliases: history table may use different names
+    col_aliases = {
+        'created_at': 'recorded_at',  # history uses recorded_at instead of created_at
+    }
+
+    # Build the history SELECT, mapping columns that exist
+    hist_select_parts = []
+    for col in std_cols:
+        if col in hist_cols:
+            hist_select_parts.append(col)
+        elif col in col_aliases and col_aliases[col] in hist_cols:
+            hist_select_parts.append(f"{col_aliases[col]} AS {col}")
+        elif col == 'source':
+            hist_select_parts.append("'n8n automation' AS source")
+        elif col == 'created_at':
+            hist_select_parts.append("NOW() AS created_at")
+        else:
+            hist_select_parts.append(f"NULL AS {col}")
+
+    hist_select = ', '.join(hist_select_parts)
+    main_select = ', '.join(std_cols)
+
+    try:
+        cursor.execute(f"""
+            CREATE OR REPLACE VIEW economic_indicators_combined AS
+            SELECT DISTINCT ON (date, indicator_name)
+                {main_select}
+            FROM (
+                SELECT {main_select} FROM economic_indicators
+                UNION ALL
+                SELECT {hist_select} FROM economic_indicators_history
+            ) combined
+            ORDER BY date, indicator_name, created_at DESC
         """)
-        has_history = cursor.fetchone()[0]
-        if has_history:
-            return """(
-                SELECT DISTINCT ON (date, indicator_name)
-                    id, date, indicator_name, value, source, created_at
-                FROM (
-                    SELECT id, date, indicator_name, value, source, created_at FROM economic_indicators
-                    UNION ALL
-                    SELECT id, date, indicator_name, value, source, created_at FROM economic_indicators_history
-                ) combined
-                ORDER BY date, indicator_name, created_at DESC
-            ) AS economic_indicators"""
-    # Fallback: just the original table
-    return "economic_indicators"
+        conn.commit()
+        _ei_view_created = True
+        return "economic_indicators_combined"
+    except Exception:
+        conn.rollback()
+        return "economic_indicators"
 
 def get_ph(conn):
     """Return the SQL placeholder for this connection type"""
