@@ -47,51 +47,112 @@ def is_postgres(conn):
     """Check if connection is PostgreSQL"""
     return isinstance(conn, psycopg2.extensions.connection)
 
-_ei_view_name = None
+_ei_view_cache = {'name': None, 'has_history': None}
+
+def _history_table_exists(conn):
+    """Check whether economic_indicators_history table exists."""
+    try:
+        cursor = conn.cursor()
+        if is_postgres(conn):
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_name = 'economic_indicators_history'
+                )
+            """)
+            return cursor.fetchone()[0]
+        else:
+            cursor.execute("""
+                SELECT COUNT(*) FROM sqlite_master
+                WHERE type = 'table' AND name = 'economic_indicators_history'
+            """)
+            return cursor.fetchone()[0] > 0
+    except Exception:
+        return False
+
+def _create_combined_view_pg(conn):
+    """Create the combined view on PostgreSQL.
+    Uses UNION ALL with ROW_NUMBER to prefer current data over history
+    when the same (date, indicator_name) exists in both tables, and
+    includes the source column."""
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE OR REPLACE VIEW economic_indicators_combined AS
+        SELECT date, indicator_name, value, source
+        FROM (
+            SELECT date, indicator_name, value, source,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY date, indicator_name
+                       ORDER BY priority ASC
+                   ) AS rn
+            FROM (
+                SELECT date, indicator_name, value, source, 1 AS priority
+                FROM economic_indicators
+                UNION ALL
+                SELECT date, indicator_name, value,
+                       COALESCE(source, 'history') AS source, 2 AS priority
+                FROM economic_indicators_history
+            ) combined
+        ) ranked
+        WHERE rn = 1
+    """)
+    conn.commit()
+
+def _create_combined_view_sqlite(conn):
+    """Create the combined view on SQLite.
+    Same dedup logic: current table wins over history for matching
+    (date, indicator_name) pairs."""
+    cursor = conn.cursor()
+    cursor.execute("DROP VIEW IF EXISTS economic_indicators_combined")
+    cursor.execute("""
+        CREATE VIEW economic_indicators_combined AS
+        SELECT c.date, c.indicator_name, c.value, c.source
+        FROM economic_indicators c
+        UNION ALL
+        SELECT h.date, h.indicator_name, h.value,
+               COALESCE(h.source, 'history') AS source
+        FROM economic_indicators_history h
+        WHERE NOT EXISTS (
+            SELECT 1 FROM economic_indicators c2
+            WHERE c2.date = h.date AND c2.indicator_name = h.indicator_name
+        )
+    """)
+    conn.commit()
 
 def economic_indicators_view(conn):
     """Return a table/view name for reading economic indicators.
-    If economic_indicators_history exists, creates a combined view
-    using only date, indicator_name, value (guaranteed in both tables).
-    UNION deduplicates identical rows automatically."""
-    global _ei_view_name
+    If economic_indicators_history exists, creates a combined view that:
+    - Includes rows from both current and history tables
+    - Prefers current data when the same (date, indicator_name) exists in both
+    - Preserves the source column
+    - Works on both PostgreSQL and SQLite
+    Re-checks for the history table each time so a mid-session import is picked up."""
+    global _ei_view_cache
 
-    if _ei_view_name is not None:
-        return _ei_view_name
+    has_history = _history_table_exists(conn)
 
-    if not is_postgres(conn):
-        _ei_view_name = "economic_indicators"
-        return _ei_view_name
+    # If the situation hasn't changed since last call, reuse the cached name
+    if _ei_view_cache['name'] is not None and _ei_view_cache['has_history'] == has_history:
+        return _ei_view_cache['name']
+
+    if not has_history:
+        _ei_view_cache = {'name': 'economic_indicators', 'has_history': False}
+        return _ei_view_cache['name']
 
     try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT EXISTS (
-                SELECT 1 FROM information_schema.tables
-                WHERE table_name = 'economic_indicators_history'
-            )
-        """)
-        if cursor.fetchone()[0]:
-            cursor.execute("""
-                CREATE OR REPLACE VIEW economic_indicators_combined AS
-                SELECT date, indicator_name, value
-                FROM economic_indicators
-                UNION
-                SELECT date, indicator_name, value
-                FROM economic_indicators_history
-            """)
-            conn.commit()
-            _ei_view_name = "economic_indicators_combined"
+        if is_postgres(conn):
+            _create_combined_view_pg(conn)
         else:
-            _ei_view_name = "economic_indicators"
+            _create_combined_view_sqlite(conn)
+        _ei_view_cache = {'name': 'economic_indicators_combined', 'has_history': True}
     except Exception:
         try:
             conn.rollback()
         except Exception:
             pass
-        _ei_view_name = "economic_indicators"
+        _ei_view_cache = {'name': 'economic_indicators', 'has_history': has_history}
 
-    return _ei_view_name
+    return _ei_view_cache['name']
 
 def get_ph(conn):
     """Return the SQL placeholder for this connection type"""
