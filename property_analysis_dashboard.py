@@ -47,87 +47,51 @@ def is_postgres(conn):
     """Check if connection is PostgreSQL"""
     return isinstance(conn, psycopg2.extensions.connection)
 
-_ei_view_created = False
+_ei_view_name = None
 
 def economic_indicators_view(conn):
-    """Return the table/view name that combines economic_indicators and economic_indicators_history.
-    Creates a PostgreSQL VIEW on first call if the history table exists.
-    Only uses columns guaranteed to exist in both tables: date, indicator_name, value."""
-    global _ei_view_created
+    """Return a table/view name for reading economic indicators.
+    If economic_indicators_history exists, creates a combined view
+    using only date, indicator_name, value (guaranteed in both tables).
+    UNION deduplicates identical rows automatically."""
+    global _ei_view_name
+
+    if _ei_view_name is not None:
+        return _ei_view_name
 
     if not is_postgres(conn):
-        return "economic_indicators"
-
-    if _ei_view_created:
-        return "economic_indicators_combined"
-
-    cursor = conn.cursor()
-
-    # Check if history table exists
-    cursor.execute("""
-        SELECT EXISTS (
-            SELECT 1 FROM information_schema.tables
-            WHERE table_name = 'economic_indicators_history'
-        )
-    """)
-    if not cursor.fetchone()[0]:
-        return "economic_indicators"
-
-    # Check what columns exist in each table
-    cursor.execute("""
-        SELECT column_name FROM information_schema.columns
-        WHERE table_name = 'economic_indicators' ORDER BY ordinal_position
-    """)
-    main_cols = {row[0] for row in cursor.fetchall()}
-
-    cursor.execute("""
-        SELECT column_name FROM information_schema.columns
-        WHERE table_name = 'economic_indicators_history' ORDER BY ordinal_position
-    """)
-    hist_cols = {row[0] for row in cursor.fetchall()}
-
-    # Build SELECT lists using only columns that exist, with safe defaults for missing ones
-    # The view needs: id, date, indicator_name, value, source
-    def col_or_default(col, cols, default):
-        return col if col in cols else f"{default} AS {col}"
-
-    main_parts = [
-        col_or_default('id', main_cols, '0'),
-        col_or_default('date', main_cols, 'NULL'),
-        col_or_default('indicator_name', main_cols, 'NULL'),
-        col_or_default('value', main_cols, 'NULL'),
-        col_or_default('source', main_cols, "'Manual Entry'"),
-    ]
-
-    hist_parts = [
-        col_or_default('id', hist_cols, '0'),
-        col_or_default('date', hist_cols, 'NULL'),
-        col_or_default('indicator_name', hist_cols, 'NULL'),
-        col_or_default('value', hist_cols, 'NULL'),
-        col_or_default('source', hist_cols, "'n8n automation'"),
-    ]
-
-    main_select = ', '.join(main_parts)
-    hist_select = ', '.join(hist_parts)
+        _ei_view_name = "economic_indicators"
+        return _ei_view_name
 
     try:
-        cursor.execute(f"""
-            CREATE OR REPLACE VIEW economic_indicators_combined AS
-            SELECT DISTINCT ON (date, indicator_name)
-                id, date, indicator_name, value, source
-            FROM (
-                SELECT {main_select} FROM economic_indicators
-                UNION ALL
-                SELECT {hist_select} FROM economic_indicators_history
-            ) combined
-            ORDER BY date, indicator_name, id DESC
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_name = 'economic_indicators_history'
+            )
         """)
-        conn.commit()
-        _ei_view_created = True
-        return "economic_indicators_combined"
+        if cursor.fetchone()[0]:
+            cursor.execute("""
+                CREATE OR REPLACE VIEW economic_indicators_combined AS
+                SELECT date, indicator_name, value
+                FROM economic_indicators
+                UNION
+                SELECT date, indicator_name, value
+                FROM economic_indicators_history
+            """)
+            conn.commit()
+            _ei_view_name = "economic_indicators_combined"
+        else:
+            _ei_view_name = "economic_indicators"
     except Exception:
-        conn.rollback()
-        return "economic_indicators"
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        _ei_view_name = "economic_indicators"
+
+    return _ei_view_name
 
 def get_ph(conn):
     """Return the SQL placeholder for this connection type"""
@@ -3003,10 +2967,10 @@ def show_data_management():
         conn = get_db_connection()
         
         if view_type == "Economic Indicators":
-            ei_view = economic_indicators_view(conn)
-            df = pd.read_sql_query(f"""
+            # Use base table for View/Edit (needs id and source for edit/delete)
+            df = pd.read_sql_query("""
                 SELECT id, date, indicator_name, value, source
-                FROM {ei_view}
+                FROM economic_indicators
                 ORDER BY date DESC, indicator_name
             """, conn)
             
@@ -3459,7 +3423,7 @@ def show_data_management():
         
         conn = get_db_connection()
         
-        # Get all data for summary
+        # Get all data for summary (combined view for comprehensive data)
         ei_view = economic_indicators_view(conn)
         economic_df = pd.read_sql_query(f"SELECT * FROM {ei_view} ORDER BY date DESC", conn)
         property_df = pd.read_sql_query("SELECT * FROM property_data ORDER BY date DESC", conn)
@@ -3539,7 +3503,10 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
                         report += f"### {indicator.replace('_', ' ').title()}\n\n"
                         report += f"**Latest Value:** {latest['value']}\n"
                         report += f"**Date:** {latest['date']}\n"
-                        report += f"**Source:** {latest['source']}\n\n"
+                        if 'source' in economic_df.columns:
+                            report += f"**Source:** {latest['source']}\n\n"
+                        else:
+                            report += "\n"
                         
                         if len(indicator_data) > 1:
                             previous = indicator_data.iloc[1]
