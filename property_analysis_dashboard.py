@@ -92,8 +92,9 @@ def _create_combined_view_pg(conn):
     else:
         hist_source = "'history' AS source"
 
+    cursor.execute("DROP VIEW IF EXISTS economic_indicators_combined")
     cursor.execute(f"""
-        CREATE OR REPLACE VIEW economic_indicators_combined AS
+        CREATE VIEW economic_indicators_combined AS
         SELECT date, indicator_name, value, source
         FROM (
             SELECT date, indicator_name, value, source,
