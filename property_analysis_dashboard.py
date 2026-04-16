@@ -2025,6 +2025,128 @@ Confidence Level: {confidence.get('level', 'Unknown')}
         - Final score represents true market conditions with uncertainty bounds
         """.format(breakdown.get('cycle_position', 0)))
 
+    # ==================== DATA AUDIT ====================
+    with st.expander("🗂️ Score Data Audit — What's Feeding the Score", expanded=False):
+        conn_audit = get_db_connection()
+        ei_view = economic_indicators_view(conn_audit)
+        is_pg = is_postgres(conn_audit)
+        cursor_audit = conn_audit.cursor()
+
+        indicators_list = [
+            ('interest_rate', 'RBA Cash Rate', 30),
+            ('household_debt_gdp', 'Household Debt/GDP', 25),
+            ('rental_vacancy_rate', 'Rental Vacancy', 20),
+            ('building_approvals', 'Building Approvals', 15),
+            ('mortgage_stress_rate', 'Mortgage Stress', 15),
+            ('unemployment_rate', 'Unemployment Rate', 10),
+            ('auction_clearance_rate', 'Auction Clearance', 10),
+            ('credit_growth', 'Credit Growth', 5),
+            ('wage_growth', 'Wage Growth', 5),
+        ]
+
+        st.markdown("### Data Source Summary")
+        if is_pg:
+            cursor_audit.execute("SELECT COUNT(*) FROM economic_indicators")
+            current_count = cursor_audit.fetchone()[0]
+            try:
+                cursor_audit.execute("SELECT COUNT(*) FROM economic_indicators_history")
+                history_count = cursor_audit.fetchone()[0]
+            except Exception:
+                history_count = 0
+                conn_audit.rollback()
+            cursor_audit.execute(f"SELECT COUNT(*) FROM {ei_view}")
+            combined_count = cursor_audit.fetchone()[0]
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Current Table Rows", current_count)
+            c2.metric("History Table Rows", history_count)
+            c3.metric("Combined View Rows", combined_count)
+        else:
+            st.info("Running on SQLite — history table may not be available.")
+
+        st.markdown("---")
+        st.markdown("### Per-Indicator Data")
+
+        for ind_key, ind_name, weight in indicators_list:
+            indicator_detail = breakdown.get('indicator_scores', {}).get(ind_key)
+            vol_detail = breakdown.get('volatility_analysis', {}).get(ind_key)
+
+            st.markdown(f"#### {ind_name} (weight: {weight})")
+
+            ph = "%s" if is_pg else "?"
+
+            # Latest value used for scoring
+            cursor_audit.execute(f"""
+                SELECT date, value FROM {ei_view}
+                WHERE indicator_name = {ph}
+                ORDER BY date DESC LIMIT 1
+            """, (ind_key,))
+            latest = cursor_audit.fetchone()
+
+            if not latest:
+                st.warning(f"No data found for {ind_name} — skipped in score calculation")
+                st.markdown("---")
+                continue
+
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("Latest Value", f"{latest[1]:.2f}")
+            col_b.metric("Date", str(latest[0]))
+            if indicator_detail:
+                score_with_trend = indicator_detail['score'] + indicator_detail['trend_bonus']
+                col_c.metric("Indicator Score", f"{score_with_trend}/100",
+                             delta=f"trend: {indicator_detail['trend_bonus']:+d}" if indicator_detail['trend_bonus'] != 0 else None)
+
+            # Trend data (last 2 values within 3 months)
+            if is_pg:
+                cursor_audit.execute(f"""
+                    SELECT date, value FROM {ei_view}
+                    WHERE indicator_name = %s
+                    AND date >= CURRENT_DATE - INTERVAL '3 months'
+                    ORDER BY date DESC LIMIT 5
+                """, (ind_key,))
+            else:
+                cursor_audit.execute(f"""
+                    SELECT date, value FROM {ei_view}
+                    WHERE indicator_name = ?
+                    AND date >= date('now', '-3 months')
+                    ORDER BY date DESC LIMIT 5
+                """, (ind_key,))
+            trend_rows = cursor_audit.fetchall()
+
+            if trend_rows:
+                trend_df = pd.DataFrame(trend_rows, columns=['Date', 'Value'])
+                st.markdown("**Recent data points (used for trend):**")
+                st.dataframe(trend_df, use_container_width=True, hide_index=True)
+                if indicator_detail:
+                    st.caption(f"Trend direction: **{indicator_detail['trend']}** | "
+                               f"Change: {indicator_detail.get('trend_change', 0):+.1f}%")
+
+            # Volatility data (last 6 months)
+            if vol_detail:
+                st.caption(f"Volatility: **{vol_detail['level']}** (std dev: {vol_detail['std_dev']:.2f}, "
+                           f"penalty: {vol_detail['penalty']} pts)")
+
+            # Source breakdown if Postgres
+            if is_pg:
+                try:
+                    cursor_audit.execute("""
+                        SELECT 'current' AS source, COUNT(*) FROM economic_indicators
+                        WHERE indicator_name = %s
+                    """, (ind_key,))
+                    current_rows = cursor_audit.fetchone()[1]
+                    cursor_audit.execute("""
+                        SELECT 'history' AS source, COUNT(*) FROM economic_indicators_history
+                        WHERE indicator_name = %s
+                    """, (ind_key,))
+                    history_rows = cursor_audit.fetchone()[1]
+                    st.caption(f"Data sources: **{current_rows}** from current table, "
+                               f"**{history_rows}** from history table")
+                except Exception:
+                    conn_audit.rollback()
+
+            st.markdown("---")
+
+        conn_audit.close()
 
 
 def show_economic_indicators():
