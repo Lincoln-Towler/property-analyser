@@ -70,13 +70,29 @@ def _history_table_exists(conn):
     except Exception:
         return False
 
+def _get_table_columns(cursor, table_name):
+    """Return the set of column names for a table (Postgres only)."""
+    cursor.execute("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = %s
+    """, (table_name,))
+    return {row[0] for row in cursor.fetchall()}
+
 def _create_combined_view_pg(conn):
     """Create the combined view on PostgreSQL.
     Uses UNION ALL with ROW_NUMBER to prefer current data over history
-    when the same (date, indicator_name) exists in both tables, and
-    includes the source column."""
+    when the same (date, indicator_name) exists in both tables.
+    Dynamically checks for the source column in the history table."""
     cursor = conn.cursor()
-    cursor.execute("""
+    hist_cols = _get_table_columns(cursor, 'economic_indicators_history')
+    has_source = 'source' in hist_cols
+
+    if has_source:
+        hist_source = "source"
+    else:
+        hist_source = "'history' AS source"
+
+    cursor.execute(f"""
         CREATE OR REPLACE VIEW economic_indicators_combined AS
         SELECT date, indicator_name, value, source
         FROM (
@@ -90,7 +106,7 @@ def _create_combined_view_pg(conn):
                 FROM economic_indicators
                 UNION ALL
                 SELECT date, indicator_name, value,
-                       COALESCE(source, 'history') AS source, 2 AS priority
+                       {hist_source}, 2 AS priority
                 FROM economic_indicators_history
             ) combined
         ) ranked
@@ -103,14 +119,20 @@ def _create_combined_view_sqlite(conn):
     Same dedup logic: current table wins over history for matching
     (date, indicator_name) pairs."""
     cursor = conn.cursor()
+
+    cursor.execute("PRAGMA table_info(economic_indicators_history)")
+    hist_cols = {row[1] for row in cursor.fetchall()}
+    has_source = 'source' in hist_cols
+    hist_source = "h.source" if has_source else "'history' AS source"
+
     cursor.execute("DROP VIEW IF EXISTS economic_indicators_combined")
-    cursor.execute("""
+    cursor.execute(f"""
         CREATE VIEW economic_indicators_combined AS
         SELECT c.date, c.indicator_name, c.value, c.source
         FROM economic_indicators c
         UNION ALL
         SELECT h.date, h.indicator_name, h.value,
-               COALESCE(h.source, 'history') AS source
+               {hist_source}
         FROM economic_indicators_history h
         WHERE NOT EXISTS (
             SELECT 1 FROM economic_indicators c2
@@ -145,11 +167,12 @@ def economic_indicators_view(conn):
         else:
             _create_combined_view_sqlite(conn)
         _ei_view_cache = {'name': 'economic_indicators_combined', 'has_history': True}
-    except Exception:
+    except Exception as e:
         try:
             conn.rollback()
         except Exception:
             pass
+        st.warning(f"Could not create combined economic indicators view: {e}. Using current data only.")
         _ei_view_cache = {'name': 'economic_indicators', 'has_history': has_history}
 
     return _ei_view_cache['name']
@@ -431,11 +454,17 @@ def get_indicator_data(indicator_name, days=365):
     """Fetch historical data for a specific indicator (includes history)"""
     conn = get_db_connection()
     view = economic_indicators_view(conn)
+    if is_postgres(conn):
+        date_filter = f"AND date >= CURRENT_DATE - INTERVAL '{days} days'"
+        ph = "%s"
+    else:
+        date_filter = f"AND date >= date('now', '-{days} days')"
+        ph = "?"
     query = f"""
         SELECT date, value
         FROM {view}
-        WHERE indicator_name = %s
-        AND date >= date('now', '-{days} days')
+        WHERE indicator_name = {ph}
+        {date_filter}
         ORDER BY date
     """
     df = pd.read_sql_query(query, conn, params=(indicator_name,))
