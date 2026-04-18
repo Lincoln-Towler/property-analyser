@@ -2641,35 +2641,55 @@ def show_anderson_tracker():
     st.markdown("""
     This tracker helps you understand where we are in the 18.6-year real estate cycle according to Phillip Anderson's theory.
     """)
-    
+
+    # Dynamic cycle math
+    current_year = datetime.now().year
+    cycle_start = 2011  # Post-GFC bottom (Anderson's current cycle)
+    cycle_length = 18.6
+    years_elapsed = current_year - cycle_start
+    cycle_position = years_elapsed % cycle_length
+    cycle_end_year = cycle_start + int(round(cycle_length))
+
+    # Phase definitions: (start_year, end_year, name, description)
+    phases = [
+        (0, 7, "Phase 1", "Recovery", ["Steady growth after crash", "Rebuilding confidence"]),
+        (7, 9, "Mid-Cycle", "Slowdown", ["Correction/recession", "Temporary pause"]),
+        (9, 14, "Phase 2", "Boom", ["Explosive growth", "Credit expansion"]),
+        (14, 16, "Winner's Curse", "Peak", ["Speculation peak", "Final blow-off top"]),
+        (16, cycle_length, "Crash", "Correction", ["Major downturn", "Best buying opportunity"]),
+    ]
+
+    # Figure out current phase
+    def phase_for(pos):
+        for start, end, name, desc, _ in phases:
+            if start <= pos < end:
+                return name, desc
+        return phases[-1][2], phases[-1][3]
+
+    current_phase_name, current_phase_desc = phase_for(cycle_position)
+
     # Cycle clock visualization
     st.subheader("Cycle Position")
-    
+
     col1, col2 = st.columns([3, 2])
-    
+
     with col1:
-        # Create a circular cycle chart
-        current_year = 2026
-        cycle_start = 2011  # Post-GFC bottom
-        years_elapsed = current_year - cycle_start
-        cycle_percentage = (years_elapsed / 18.6) * 100
-        
         fig = go.Figure(go.Indicator(
             mode="gauge+number+delta",
-            value=years_elapsed,
+            value=cycle_position,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': f"Years into Cycle (Started {cycle_start})"},
+            title={'text': f"Year {cycle_position:.1f} of {cycle_length} (Started {cycle_start})"},
             delta={'reference': 14, 'increasing': {'color': "red"}},
             gauge={
-                'axis': {'range': [0, 18.6], 'tickwidth': 1},
+                'axis': {'range': [0, cycle_length], 'tickwidth': 1},
                 'bar': {'color': "darkblue"},
                 'bgcolor': "white",
                 'steps': [
-                    {'range': [0, 7], 'color': 'lightgreen', 'name': 'Phase 1'},
-                    {'range': [7, 9], 'color': 'yellow', 'name': 'Mid-Cycle'},
-                    {'range': [9, 14], 'color': 'orange', 'name': 'Phase 2'},
-                    {'range': [14, 16], 'color': 'red', 'name': 'Peak'},
-                    {'range': [16, 18.6], 'color': 'darkred', 'name': 'Crash'}
+                    {'range': [0, 7], 'color': 'lightgreen'},
+                    {'range': [7, 9], 'color': 'yellow'},
+                    {'range': [9, 14], 'color': 'orange'},
+                    {'range': [14, 16], 'color': 'red'},
+                    {'range': [16, cycle_length], 'color': 'darkred'}
                 ],
                 'threshold': {
                     'line': {'color': "red", 'width': 4},
@@ -2680,57 +2700,68 @@ def show_anderson_tracker():
         ))
         fig.update_layout(height=400)
         st.plotly_chart(fig, use_container_width=True, key="anderson_cycle_gauge")
-    
+
     with col2:
         st.markdown("### Cycle Phase Breakdown")
-        st.markdown("""
-        **Phase 1 (Years 1-7):** Recovery
-        - Steady growth after crash
-        - Rebuilding confidence
-        - ✅ Completed
-        
-        **Mid-Cycle (Years 7-9):** Slowdown
-        - Correction/recession
-        - 2018-19 & COVID
-        - ✅ Completed
-        
-        **Phase 2 (Years 9-14):** Boom
-        - Explosive growth
-        - Currently here
-        - ⚠️ **IN PROGRESS**
-        
-        **Winner's Curse (Years 14-16):** Peak
-        - Speculation peak
-        - **⚠️ APPROACHING**
-        - Predicted: 2025-2026
-        
-        **Crash (Years 16-18.6):** Correction
-        - Major downturn
-        - Best buying opportunity
-        - Predicted: 2027-2030
-        """)
-    
+        phase_md_lines = []
+        for start, end, name, desc, bullets in phases:
+            # Calendar years this phase covers (approx)
+            start_year = cycle_start + int(start)
+            end_year = cycle_start + int(round(end))
+            year_range = f"{start_year}-{end_year}" if end_year > start_year else str(start_year)
+
+            if cycle_position >= end:
+                status = "✅ Completed"
+            elif start <= cycle_position < end:
+                status = "⚠️ **IN PROGRESS**"
+            elif start - cycle_position <= 1:
+                status = "⚠️ **APPROACHING**"
+            else:
+                status = "⏳ Upcoming"
+
+            bullet_md = "\n".join(f"- {b}" for b in bullets)
+            phase_md_lines.append(
+                f"**{name} (Years {int(start)}-{int(round(end))}):** {desc}\n"
+                f"- {year_range}\n"
+                f"{bullet_md}\n"
+                f"- {status}\n"
+            )
+        st.markdown("\n".join(phase_md_lines))
+
     st.markdown("---")
-    
+
     # Historical cycle comparison
     st.subheader("Historical Cycle Comparison")
-    
-    st.markdown("""
+
+    predicted_peak_year = cycle_start + 15  # middle of Winner's Curse phase
+    crash_start_year = cycle_start + 16
+    crash_end_year = cycle_start + int(round(cycle_length))
+
+    if cycle_position < 14:
+        accuracy = "⏳ In Progress"
+    elif cycle_position < 16:
+        accuracy = "⚠️ Approaching Peak"
+    elif cycle_position < cycle_length:
+        accuracy = "🔻 Crash Phase"
+    else:
+        accuracy = "✅ Cycle Complete"
+
+    st.markdown(f"""
     Anderson's theory has successfully predicted previous cycles:
-    
+
     | Cycle | Bottom | Peak | Crash | Accuracy |
     |-------|--------|------|-------|----------|
     | 1973-1991 | 1973 | 1989 | 1990-1991 | ✅ Correct |
     | 1992-2010 | 1992 | 2007 | 2008-2010 | ✅ Correct |
-    | 2011-2029 | 2011 | **2026** | **2027-2030** | ⏳ In Progress |
+    | {cycle_start}-{cycle_end_year} | {cycle_start} | **{predicted_peak_year}** | **{crash_start_year}-{crash_end_year}** | {accuracy} |
     """)
-    
+
     # Current signals
     st.markdown("---")
     st.subheader("Current Cycle Signals")
-    
+
     col1, col2, col3 = st.columns(3)
-    
+
     with col1:
         st.markdown("**✅ Signals We've Seen**")
         st.markdown("""
@@ -2740,7 +2771,7 @@ def show_anderson_tracker():
         - Regional market surge ✓
         - FOMO and speculation ✓
         """)
-    
+
     with col2:
         st.markdown("**⚠️ Peak Warning Signs**")
         st.markdown("""
@@ -2750,7 +2781,7 @@ def show_anderson_tracker():
         - "Property only goes up"
         - Rate hikes not cuts
         """)
-    
+
     with col3:
         st.markdown("**🔮 What to Watch**")
         st.markdown("""
@@ -2760,20 +2791,56 @@ def show_anderson_tracker():
         - Forced sales increasing
         - Sentiment shift
         """)
-    
-    # Anderson's recommendation
+
+    # Anderson's recommendation - dynamic based on current phase
     st.markdown("---")
-    st.warning("""
+
+    best_buy_start = cycle_start + 17
+    best_buy_end = cycle_start + 18
+
+    if cycle_position < 7:
+        recommendation_lines = [
+            f"- 🟢 **BUY** - early recovery phase, prices still low",
+            f"- 🟢 **ACCUMULATE** quality assets while sentiment is weak",
+            f"- 🟡 Watch for credit loosening as recovery strengthens",
+        ]
+    elif cycle_position < 9:
+        recommendation_lines = [
+            f"- 🟡 **SELECTIVE BUYING** - mid-cycle slowdown creates opportunities",
+            f"- 🟡 **HOLD** existing positions - temporary pause, not a crash",
+            f"- 🟢 Prepare for Phase 2 boom in next 1-2 years",
+        ]
+    elif cycle_position < 14:
+        recommendation_lines = [
+            f"- 🟢 **BUY** - Phase 2 boom, strong momentum",
+            f"- 🟡 Avoid overleveraging as cycle matures",
+            f"- 🟡 Start planning exit strategy for peak ({predicted_peak_year})",
+        ]
+    elif cycle_position < 16:
+        recommendation_lines = [
+            f"- 🔴 **DO NOT BUY** aggressively - we're at/near the peak",
+            f"- 🟡 **HOLD** existing properties if you have equity buffers",
+            f"- 🟢 **PREPARE CASH** for the predicted {crash_start_year}-{crash_end_year} downturn",
+            f"- 🟢 **BEST BUYING OPPORTUNITY** predicted for {best_buy_start}-{best_buy_end}",
+        ]
+    else:
+        recommendation_lines = [
+            f"- 🔴 **DO NOT BUY** yet - crash phase in progress",
+            f"- 🟢 **HOLD CASH** - wait for clear bottom signals",
+            f"- 🟢 **BEST BUYING OPPORTUNITY** predicted for {best_buy_start}-{best_buy_end}",
+            f"- 🟡 Watch for stabilisation in vacancy rates and clearance rates",
+        ]
+
+    recommendation_md = "\n    ".join(recommendation_lines)
+
+    st.warning(f"""
     **According to Anderson's Theory:**
-    
-    We are approximately at **Year 15 of the 18.6-year cycle** (2026).
-    
+
+    We are approximately at **Year {cycle_position:.1f} of the {cycle_length}-year cycle** ({current_year}) - currently in the **{current_phase_name}** phase ({current_phase_desc}).
+
     This suggests:
-    - 🔴 **DO NOT BUY** aggressively now - we're potentially at/near the peak
-    - 🟡 **HOLD** existing properties if you have equity buffers
-    - 🟢 **PREPARE CASH** for the predicted 2027-2030 downturn
-    - 🟢 **BEST BUYING OPPORTUNITY** predicted for 2028-2029
-    
+    {recommendation_md}
+
     **⚠️ Important:** This is one theory among many. It has historically been accurate but is not guaranteed.
     Use this as ONE input into your decision-making, not the only factor.
     """)
