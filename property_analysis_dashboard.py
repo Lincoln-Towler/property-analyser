@@ -1346,6 +1346,149 @@ def calculate_market_score():
     return score, signal
 
 
+def _classify_indicator(value, cfg):
+    """Return (category, note) where category is 'bullish' | 'bearish' | 'neutral'."""
+    unit = cfg.get('unit', '')
+    impact = cfg.get('impact')
+    fmt = f"{value:,.0f}{unit}" if abs(value) >= 1000 else f"{value:.2f}{unit}"
+
+    if impact == 'inverse':
+        if 'danger_above' in cfg and value > cfg['danger_above']:
+            return 'bearish', f"at danger level ({fmt}, >{cfg['danger_above']}{unit})"
+        if 'warning_above' in cfg and value > cfg['warning_above']:
+            return 'bearish', f"above warning ({fmt}, >{cfg['warning_above']}{unit})"
+        if 'oversupply_above' in cfg and value > cfg['oversupply_above']:
+            return 'bearish', f"oversupply ({fmt}, >{cfg['oversupply_above']}{unit})"
+        if 'optimal_below' in cfg and value < cfg['optimal_below']:
+            return 'bullish', f"in optimal zone ({fmt})"
+        if 'healthy_below' in cfg and value < cfg['healthy_below']:
+            return 'bullish', f"healthy ({fmt})"
+        if 'optimal_min' in cfg and cfg['optimal_min'] <= value <= cfg.get('optimal_max', cfg['optimal_min']):
+            return 'bullish', f"in optimal range ({fmt})"
+        return 'neutral', f"at {fmt}"
+
+    if impact == 'direct':
+        if 'crisis_below' in cfg and value < cfg['crisis_below']:
+            return 'bearish', f"at crisis level ({fmt})"
+        if 'deficit_below' in cfg and value < cfg['deficit_below']:
+            return 'bearish', f"deficit ({fmt})"
+        if 'weak_below' in cfg and value < cfg['weak_below']:
+            return 'bearish', f"weak ({fmt})"
+        if 'optimal_above' in cfg and value >= cfg['optimal_above']:
+            return 'bullish', f"above optimal ({fmt})"
+        if 'healthy_above' in cfg and value >= cfg['healthy_above']:
+            return 'bullish', f"healthy ({fmt})"
+        if 'healthy_range' in cfg:
+            lo, hi = cfg['healthy_range']
+            if lo <= value <= hi:
+                return 'bullish', f"healthy ({fmt})"
+            if value < lo:
+                return 'bearish', f"below healthy ({fmt})"
+            return 'neutral', f"above healthy ({fmt})"
+        return 'neutral', f"at {fmt}"
+
+    return 'neutral', f"at {fmt}"
+
+
+def generate_auto_commentary(conn):
+    """Generate market commentary from current indicator values, score, and cycle position.
+
+    Returns a markdown string, or None if the connection is unavailable."""
+    from datetime import datetime
+    import psycopg2
+
+    if conn is None:
+        return None
+
+    try:
+        score, signal, _ = calculate_market_score_v3(conn)
+    except Exception:
+        score, signal = None, None
+
+    is_pg = isinstance(conn, psycopg2.extensions.connection)
+    cursor = conn.cursor()
+    ei_view = economic_indicators_view(conn)
+    ph = "%s" if is_pg else "?"
+
+    bullish, bearish, neutral = [], [], []
+    for key, cfg in INDICATORS_CONFIG.items():
+        try:
+            cursor.execute(f"""
+                SELECT value FROM {ei_view}
+                WHERE indicator_name = {ph}
+                ORDER BY date DESC LIMIT 1
+            """, (key,))
+            row = cursor.fetchone()
+        except Exception:
+            row = None
+        if not row:
+            continue
+        category, note = _classify_indicator(row[0], cfg)
+        display = cfg.get('display_name', key.replace('_', ' ').title())
+        entry = f"- **{display}**: {note}"
+        if category == 'bullish':
+            bullish.append(entry)
+        elif category == 'bearish':
+            bearish.append(entry)
+        else:
+            neutral.append(entry)
+
+    # Anderson cycle phase (keep in sync with show_anderson_tracker)
+    cycle_start = 2011
+    cycle_length = 18.6
+    cycle_position = (datetime.now().year - cycle_start) % cycle_length
+    if cycle_position < 7:
+        phase = "Recovery"
+    elif cycle_position < 9:
+        phase = "Mid-Cycle Slowdown"
+    elif cycle_position < 14:
+        phase = "Phase 2 Boom"
+    elif cycle_position < 16:
+        phase = "Winner's Curse / Peak"
+    else:
+        phase = "Crash / Correction"
+
+    if score is None:
+        recommendation = "Insufficient data — add more indicator values in Data Management."
+    elif score >= 75:
+        recommendation = "Strong fundamentals across the board — consider acquisitions in well-located suburbs."
+    elif score >= 60:
+        recommendation = "Constructive conditions — continue buying selectively with a margin of safety."
+    elif score >= 50:
+        recommendation = "Balanced conditions — focus on quality over quantity and stress-test cash flow."
+    elif score >= 40:
+        recommendation = "Mixed signals — hold existing positions, avoid aggressive leverage, watch trends."
+    elif score >= 30:
+        recommendation = "Elevated risks — prioritise cash reserves and avoid speculative purchases."
+    else:
+        recommendation = "Downturn risk high — hold cash, wait for clearer bottom signals."
+
+    lines = ["**Current Market Assessment**", ""]
+    if score is not None:
+        lines.append(f"Market Score: **{score:.0f}/100** — {signal}")
+        lines.append(f"Cycle Position: **Year {cycle_position:.1f} of {cycle_length}** ({phase})")
+        lines.append("")
+
+    if bearish:
+        lines.append("**Bearish Factors:**")
+        lines.extend(bearish)
+        lines.append("")
+    if bullish:
+        lines.append("**Bullish Factors:**")
+        lines.extend(bullish)
+        lines.append("")
+    if neutral:
+        lines.append("**Neutral / Watch:**")
+        lines.extend(neutral)
+        lines.append("")
+
+    lines.append(f"**Recommendation:** {recommendation}")
+    lines.append("")
+    lines.append(f"_Auto-generated from latest indicator data on {datetime.now():%Y-%m-%d}._")
+
+    return "\n".join(lines)
+
+
 def main():
     # Initialize database
     init_database()
@@ -1652,37 +1795,27 @@ def show_dashboard():
     
     cursor_comment.execute("SELECT commentary, updated_date FROM market_commentary WHERE id = 1")
     result = cursor_comment.fetchone()
-    
-    default_commentary = """**Current Market Assessment**
 
-Based on the available data, the Australian property market shows mixed signals:
+    # Auto-generated default based on current data (falls back to a static message if generation fails)
+    auto_commentary = generate_auto_commentary(conn_comment) or (
+        "**Current Market Assessment**\n\n"
+        "Add indicator data in Data Management to generate a live market commentary."
+    )
 
-**Bearish Factors:**
-- Household debt remains at historic highs
-- Sydney and Melbourne showing weakness
-- Mortgage stress affecting borrowers
-- RBA rate movements uncertain
+    has_custom = result is not None and result[0] and result[0].strip()
+    current_commentary = result[0] if has_custom else auto_commentary
+    last_updated = result[1] if has_custom else None
 
-**Bullish Factors:**
-- Severe supply shortage
-- Regional markets showing strength
-- Low mortgage arrears rates
-- Tight rental markets
-
-**Recommendation:** Exercise caution. Review indicators regularly and adjust strategy based on data changes."""
-    
-    current_commentary = result[0] if result else default_commentary
-    last_updated = result[1] if result else None
-    
     if edit_mode:
         st.markdown("**Edit Your Market Commentary:**")
+        st.caption("The default is auto-generated from current indicator data. Save to override with a custom version.")
         new_commentary = st.text_area(
             "Commentary (supports Markdown formatting)",
             value=current_commentary,
             height=300,
             key="commentary_editor"
         )
-        
+
         col1, col2, col3 = st.columns([1, 1, 2])
         with col1:
             if st.button("💾 Save", type="primary", key="save_commentary"):
@@ -1692,24 +1825,25 @@ Based on the available data, the Australian property market shows mixed signals:
                 conn_comment.commit()
                 st.success("✅ Commentary saved!")
                 st.rerun()
-        
+
         with col2:
-            if st.button("🔄 Reset to Default", key="reset_commentary"):
-                cursor_comment.execute("""
-                    INSERT INTO market_commentary (id, commentary, updated_date) VALUES (1, %s, CURRENT_DATE) ON CONFLICT (id) DO UPDATE SET commentary = EXCLUDED.commentary, updated_date = EXCLUDED.updated_date
-                """, (default_commentary,))
+            if st.button("🔄 Reset to Auto", key="reset_commentary"):
+                # Remove the saved custom commentary so the auto-generated default takes over
+                cursor_comment.execute("DELETE FROM market_commentary WHERE id = 1")
                 conn_comment.commit()
-                st.success("✅ Reset to default!")
+                st.success("✅ Reverted to auto-generated commentary!")
                 st.rerun()
-        
+
         st.markdown("---")
         st.markdown("**Preview:**")
         st.info(new_commentary)
     else:
         st.info(current_commentary)
-        if last_updated:
-            st.caption(f"Last updated: {last_updated}")
-    
+        if has_custom and last_updated:
+            st.caption(f"Custom commentary — last updated {last_updated}. Click Edit to revise or revert to auto.")
+        else:
+            st.caption("Auto-generated from latest indicator data. Click Edit to customise.")
+
     conn_comment.close()
 
 
