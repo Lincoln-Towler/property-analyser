@@ -686,6 +686,68 @@ def indicator_progress_fraction(value, config):
     return 0.5
 
 
+# Thresholds used by Supply/Demand analyzer and Suburb Scorer UIs.
+# Kept here (not hardcoded at call sites) so they can be tuned in one place.
+MARKET_THRESHOLDS = {
+    'vacancy_rate': {
+        'severe_undersupply_below': 1.0,  # <1% vacancy → severe undersupply
+        'tight_below': 2.0,                # 1-2% → tight market
+        'balanced_below': 3.0,             # 2-3% → balanced; ≥3% → oversupply
+    },
+    'days_on_market': {
+        'extremely_hot_below': 20,
+        'strong_demand_below': 35,
+        'balanced_below': 60,
+    },
+    'net_migration': {
+        'high_pressure_above': 10000,      # > 10k net migration → high demand pressure
+    },
+    'suburb_score': {
+        'strong_above': 40,                # 40+/50 → strong growth potential
+        'moderate_above': 30,              # 30-39 → moderate
+        'below_average_above': 20,         # 20-29 → below average; <20 → weak
+        'high_scorer_alert_above': 35,     # "Score Alerts" list cutoff
+        'max_score': 50,
+    },
+}
+
+
+def indicator_status(value, config):
+    """Return 'success' | 'warning' | 'danger' based on config thresholds."""
+    if value is None:
+        return 'warning'
+    impact = config.get('impact')
+    if impact == 'inverse':
+        if 'danger_above' in config and value > config['danger_above']:
+            return 'danger'
+        if 'oversupply_above' in config and value > config['oversupply_above']:
+            return 'danger'
+        if 'warning_above' in config and value > config['warning_above']:
+            return 'warning'
+        if 'optimal_below' in config and value < config['optimal_below']:
+            return 'success'
+        if 'healthy_below' in config and value < config['healthy_below']:
+            return 'success'
+        if 'optimal_min' in config and config['optimal_min'] <= value <= config.get('optimal_max', config['optimal_min']):
+            return 'success'
+        return 'warning'
+    if impact == 'direct':
+        if 'crisis_below' in config and value < config['crisis_below']:
+            return 'danger'
+        if 'weak_below' in config and value < config['weak_below']:
+            return 'danger'
+        if 'deficit_below' in config and value < config['deficit_below']:
+            return 'warning'
+        if 'strong_above' in config and value >= config['strong_above']:
+            return 'success'
+        if 'optimal_above' in config and value >= config['optimal_above']:
+            return 'success'
+        if 'healthy_above' in config and value >= config['healthy_above']:
+            return 'success'
+        return 'warning'
+    return 'warning'
+
+
 def calculate_market_score_v2(conn=None):
     """
     Enhanced market score calculation with weighted indicators, trends, and cycle adjustment
@@ -1649,51 +1711,26 @@ def show_dashboard():
             change = current - previous
             return current, change
     
-    # Build indicators list from database
+    # Build indicators list from database; thresholds come from INDICATORS_CONFIG.
     indicators = []
-    
-    # Household Debt/GDP
-    value, change = get_latest_indicator('household_debt_gdp')
-    if value is not None:
-        status = "danger" if value > 120 else "warning" if value > 110 else "success"
+
+    # (key, display name, value format, change format)
+    dashboard_indicators = [
+        ('household_debt_gdp', 'Household Debt/GDP', '{:.1f}%', '{:+.1f}%'),
+        ('mortgage_stress_rate', 'Mortgage Stress Rate', '{:.0f}%', '{:+.1f}%'),
+        ('rental_vacancy_rate', 'Rental Vacancy', '{:.1f}%', '{:+.1f}%'),
+        ('auction_clearance_rate', 'Auction Clearance', '{:.0f}%', '{:+.0f}%'),
+    ]
+    for key, name, val_fmt, change_fmt in dashboard_indicators:
+        value, change = get_latest_indicator(key)
+        if value is None:
+            continue
+        cfg = INDICATORS_CONFIG.get(key, {})
         indicators.append({
-            "name": "Household Debt/GDP",
-            "value": f"{value:.1f}%",
-            "change": f"{change:+.1f}%" if change != 0 else "No prior data",
-            "status": status
-        })
-    
-    # Mortgage Stress Rate
-    value, change = get_latest_indicator('mortgage_stress_rate')
-    if value is not None:
-        status = "danger" if value > 40 else "warning" if value > 30 else "success"
-        indicators.append({
-            "name": "Mortgage Stress Rate",
-            "value": f"{value:.0f}%",
-            "change": f"{change:+.1f}%" if change != 0 else "No prior data",
-            "status": status
-        })
-    
-    # Rental Vacancy
-    value, change = get_latest_indicator('rental_vacancy_rate')
-    if value is not None:
-        status = "success" if value < 2 else "warning" if value < 3 else "danger"
-        indicators.append({
-            "name": "Rental Vacancy",
-            "value": f"{value:.1f}%",
-            "change": f"{change:+.1f}%" if change != 0 else "No prior data",
-            "status": status
-        })
-    
-    # Auction Clearance
-    value, change = get_latest_indicator('auction_clearance_rate')
-    if value is not None:
-        status = "success" if value > 70 else "warning" if value > 60 else "danger"
-        indicators.append({
-            "name": "Auction Clearance",
-            "value": f"{value:.0f}%",
-            "change": f"{change:+.0f}%" if change != 0 else "No prior data",
-            "status": status
+            "name": name,
+            "value": val_fmt.format(value),
+            "change": change_fmt.format(change) if change != 0 else "No prior data",
+            "status": indicator_status(value, cfg),
         })
     
     conn.close()
@@ -3980,12 +4017,13 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
                 else:
                     report += "*No property data yet.*\n\n"
                 
-                report += """
+                _cycle_year = (datetime.now().year - 2011) % 18.6
+                report += f"""
 ## Questions for Analysis
 
 Please analyze this data and provide insights on:
 
-1. **Market Timing:** Based on the economic indicators and Anderson 18.6-year cycle theory (currently Year 15), am I at a peak or opportunity?
+1. **Market Timing:** Based on the economic indicators and Anderson 18.6-year cycle theory (currently Year {_cycle_year:.1f}), am I at a peak or opportunity?
 
 2. **Location Comparison:** Which location(s) show the strongest fundamentals for investment?
 
@@ -4807,37 +4845,40 @@ def show_supply_demand_analyzer():
 
         # Check for vacancy rate as proxy for supply/demand balance
         if not supply_df.empty:
+            vac_t = MARKET_THRESHOLDS['vacancy_rate']
             vacancy = supply_df[supply_df['metric_name'] == 'rental_vacancy_rate']
             if not vacancy.empty:
                 latest_vacancy = vacancy.sort_values('date').groupby('location').last()
                 for loc, row in latest_vacancy.iterrows():
                     rate = row['value']
-                    if rate < 1.0:
+                    if rate < vac_t['severe_undersupply_below']:
                         st.error(f"**{loc}**: Vacancy rate {rate:.1f}% - Severe undersupply (demand >> supply)")
-                    elif rate < 2.0:
+                    elif rate < vac_t['tight_below']:
                         st.warning(f"**{loc}**: Vacancy rate {rate:.1f}% - Tight market (demand > supply)")
-                    elif rate < 3.0:
+                    elif rate < vac_t['balanced_below']:
                         st.info(f"**{loc}**: Vacancy rate {rate:.1f}% - Balanced market")
                     else:
                         st.success(f"**{loc}**: Vacancy rate {rate:.1f}% - Oversupply (supply > demand)")
 
+            dom_t = MARKET_THRESHOLDS['days_on_market']
             dom = supply_df[supply_df['metric_name'] == 'days_on_market']
             if not dom.empty:
                 st.markdown("#### Days on Market (Demand Pressure)")
                 latest_dom = dom.sort_values('date').groupby('location').last()
                 for loc, row in latest_dom.iterrows():
                     days = row['value']
-                    if days < 20:
+                    if days < dom_t['extremely_hot_below']:
                         st.error(f"**{loc}**: {days:.0f} days - Extremely hot (sellers' market)")
-                    elif days < 35:
+                    elif days < dom_t['strong_demand_below']:
                         st.warning(f"**{loc}**: {days:.0f} days - Strong demand")
-                    elif days < 60:
+                    elif days < dom_t['balanced_below']:
                         st.info(f"**{loc}**: {days:.0f} days - Balanced")
                     else:
                         st.success(f"**{loc}**: {days:.0f} days - Buyers' market")
 
         if not migration_df.empty:
             st.markdown("#### Population-Driven Demand")
+            mig_t = MARKET_THRESHOLDS['net_migration']
             migration_df['date'] = pd.to_datetime(migration_df['date'])
             migration_df['net_migration'] = (
                 migration_df['interstate_migration'].fillna(0) +
@@ -4846,7 +4887,7 @@ def show_supply_demand_analyzer():
             latest_mig = migration_df.sort_values('date').groupby('state').last()
             for state_name, row in latest_mig.iterrows():
                 net = row['net_migration']
-                if net > 10000:
+                if net > mig_t['high_pressure_above']:
                     st.warning(f"**{state_name}**: Net migration +{net:,.0f} - High demand pressure")
                 elif net > 0:
                     st.info(f"**{state_name}**: Net migration +{net:,.0f} - Moderate demand")
@@ -5015,17 +5056,19 @@ def show_suburb_scorer():
                 # Recommendations
                 st.markdown("#### Recommendations")
                 total = row['total_score'] or 0
-                if total >= 40:
-                    st.success(f"**{selected}** scores {total:.1f}/50 - Strong growth potential. "
+                ss_t = MARKET_THRESHOLDS['suburb_score']
+                max_s = ss_t['max_score']
+                if total >= ss_t['strong_above']:
+                    st.success(f"**{selected}** scores {total:.1f}/{max_s} - Strong growth potential. "
                               "Multiple indicators align for above-average returns.")
-                elif total >= 30:
-                    st.info(f"**{selected}** scores {total:.1f}/50 - Moderate growth potential. "
+                elif total >= ss_t['moderate_above']:
+                    st.info(f"**{selected}** scores {total:.1f}/{max_s} - Moderate growth potential. "
                            "Some positive indicators but watch for weaknesses.")
-                elif total >= 20:
-                    st.warning(f"**{selected}** scores {total:.1f}/50 - Below average. "
+                elif total >= ss_t['below_average_above']:
+                    st.warning(f"**{selected}** scores {total:.1f}/{max_s} - Below average. "
                               "Limited growth catalysts present.")
                 else:
-                    st.error(f"**{selected}** scores {total:.1f}/50 - Weak growth outlook. "
+                    st.error(f"**{selected}** scores {total:.1f}/{max_s} - Weak growth outlook. "
                             "Few positive indicators detected.")
 
                 # Identify weakest area
@@ -5041,13 +5084,15 @@ def show_suburb_scorer():
 
             # Alerts: suburbs crossing thresholds
             st.markdown("#### Score Alerts")
-            high_scorers = latest[latest['total_score'] >= 35]
+            alert_cutoff = MARKET_THRESHOLDS['suburb_score']['high_scorer_alert_above']
+            max_s = MARKET_THRESHOLDS['suburb_score']['max_score']
+            high_scorers = latest[latest['total_score'] >= alert_cutoff]
             if not high_scorers.empty:
                 for _, row in high_scorers.iterrows():
-                    st.success(f"**{row['suburb']}, {row['state']}** - Score {row['total_score']:.1f}/50 "
+                    st.success(f"**{row['suburb']}, {row['state']}** - Score {row['total_score']:.1f}/{max_s} "
                               "- High growth potential")
             else:
-                st.info("No suburbs currently scoring above 35/50.")
+                st.info(f"No suburbs currently scoring above {alert_cutoff}/{max_s}.")
         else:
             st.info("No suburb scores calculated yet. Use the **Score a Suburb** tab to calculate scores.")
 
@@ -5118,11 +5163,12 @@ def show_suburb_scorer():
                         st.metric("Gentrification", f"{manual_gentrify:.1f}/5")
 
                     # Rating
-                    if total >= 40:
+                    ss_t = MARKET_THRESHOLDS['suburb_score']
+                    if total >= ss_t['strong_above']:
                         st.success(f"**{score_suburb}, {score_state}** - Excellent growth potential!")
-                    elif total >= 30:
+                    elif total >= ss_t['moderate_above']:
                         st.info(f"**{score_suburb}, {score_state}** - Good growth potential")
-                    elif total >= 20:
+                    elif total >= ss_t['below_average_above']:
                         st.warning(f"**{score_suburb}, {score_state}** - Average outlook")
                     else:
                         st.error(f"**{score_suburb}, {score_state}** - Below average outlook")
