@@ -528,6 +528,164 @@ def get_indicator_trend(conn, indicator_name, months=3):
         return 'falling', change_pct
 
 
+# Shared configuration for market score calculation AND UI display.
+# Both the scoring logic (calculate_market_score_v2) and the Economic Indicators
+# page read from this single source of truth so thresholds stay aligned.
+INDICATORS_CONFIG = {
+    # CRITICAL INDICATORS (Weight: 25-30)
+    'interest_rate': {
+        'weight': 30,
+        'optimal_min': 2.5,
+        'optimal_max': 4.0,
+        'danger_above': 5.5,
+        'impact': 'inverse',  # Higher = worse for property
+        'trend_matters': True,
+        'description': 'RBA Cash Rate',
+        'display_name': 'Interest Rate (RBA Cash Rate)',
+        'unit': '%',
+    },
+    'household_debt_gdp': {
+        'weight': 25,
+        'warning_above': 110,
+        'danger_above': 120,
+        'optimal_below': 100,
+        'impact': 'inverse',
+        'trend_matters': True,
+        'description': 'Debt to GDP Ratio',
+        'display_name': 'Household Debt to GDP',
+        'unit': '%',
+    },
+
+    # HIGH IMPORTANCE (Weight: 15-20)
+    'rental_vacancy_rate': {
+        'weight': 20,
+        'optimal_below': 2.0,
+        'healthy_range': (1.5, 2.5),
+        'oversupply_above': 3.5,
+        'impact': 'inverse',
+        'trend_matters': True,
+        'description': 'Rental Vacancy',
+        'display_name': 'Rental Vacancy Rate',
+        'unit': '%',
+    },
+    'building_approvals': {
+        'weight': 15,
+        'optimal_above': 240000,
+        'deficit_below': 180000,
+        'crisis_below': 160000,
+        'impact': 'direct',  # Higher = better (more supply coming)
+        'trend_matters': True,
+        'description': 'Annual Building Approvals',
+        'display_name': 'Building Approvals (Annual)',
+        'unit': '',
+    },
+
+    # MEDIUM IMPORTANCE (Weight: 10-15)
+    'mortgage_stress_rate': {
+        'weight': 15,
+        'warning_above': 30,
+        'danger_above': 40,
+        'healthy_below': 25,
+        'impact': 'inverse',
+        'trend_matters': True,
+        'description': 'Mortgage Stress %',
+        'display_name': 'Mortgage Stress Rate',
+        'unit': '%',
+    },
+    'unemployment_rate': {
+        'weight': 10,
+        'warning_above': 5.0,
+        'danger_above': 6.0,
+        'healthy_below': 4.5,
+        'impact': 'inverse',
+        'trend_matters': True,
+        'description': 'Unemployment Rate',
+        'display_name': 'Unemployment Rate',
+        'unit': '%',
+    },
+    'auction_clearance_rate': {
+        'weight': 10,
+        'healthy_above': 65,
+        'strong_above': 75,
+        'weak_below': 55,
+        'impact': 'direct',
+        'trend_matters': True,
+        'description': 'Auction Clearance %',
+        'display_name': 'Auction Clearance Rate',
+        'unit': '%',
+    },
+
+    # SUPPORTING INDICATORS (Weight: 5)
+    'credit_growth': {
+        'weight': 5,
+        'healthy_range': (0.3, 0.8),
+        'strong_above': 1.0,
+        'weak_below': 0.2,
+        'impact': 'direct',
+        'trend_matters': False,
+        'description': 'Monthly Credit Growth %',
+        'display_name': 'Credit Growth (Monthly)',
+        'unit': '%',
+    },
+    'wage_growth': {
+        'weight': 5,
+        'healthy_range': (3.0, 4.0),
+        'strong_above': 4.0,
+        'weak_below': 2.5,
+        'impact': 'direct',
+        'trend_matters': False,
+        'description': 'Annual Wage Growth %',
+        'display_name': 'Wage Growth (Annual)',
+        'unit': '%',
+    },
+}
+
+
+def indicator_target_text(config):
+    """Return a human-readable target string for an indicator (e.g., '<110%', '>65%', '2.5-4.0%')."""
+    impact = config.get('impact')
+    unit = config.get('unit', '')
+    if impact == 'inverse':
+        if 'optimal_below' in config:
+            return f"<{config['optimal_below']}{unit}"
+        if 'healthy_below' in config:
+            return f"<{config['healthy_below']}{unit}"
+        if 'optimal_max' in config and 'optimal_min' in config:
+            return f"{config['optimal_min']}-{config['optimal_max']}{unit}"
+    elif impact == 'direct':
+        if 'optimal_above' in config:
+            v = config['optimal_above']
+            return f">{v:,.0f}{unit}" if v >= 1000 else f">{v}{unit}"
+        if 'healthy_above' in config:
+            return f">{config['healthy_above']}{unit}"
+        if 'healthy_range' in config:
+            lo, hi = config['healthy_range']
+            return f"{lo}-{hi}{unit}"
+    return None
+
+
+def indicator_progress_fraction(value, config):
+    """Normalise an indicator value to 0-1 for a progress bar, based on its thresholds."""
+    if value is None:
+        return 0.0
+    impact = config.get('impact')
+    if impact == 'inverse':
+        # Scale 0..danger_above*1.1 (or oversupply_above)
+        ceiling = (config.get('danger_above')
+                   or config.get('oversupply_above')
+                   or config.get('warning_above')
+                   or config.get('optimal_max'))
+        if ceiling:
+            return max(0.0, min(1.0, value / (ceiling * 1.1)))
+    elif impact == 'direct':
+        ceiling = (config.get('optimal_above')
+                   or config.get('strong_above')
+                   or config.get('healthy_above'))
+        if ceiling:
+            return max(0.0, min(1.0, value / ceiling))
+    return 0.5
+
+
 def calculate_market_score_v2(conn=None):
     """
     Enhanced market score calculation with weighted indicators, trends, and cycle adjustment
@@ -542,98 +700,9 @@ def calculate_market_score_v2(conn=None):
     is_pg = isinstance(conn, psycopg2.extensions.connection)
     cursor = conn.cursor()
     ei_view = economic_indicators_view(conn)
-    
-    # PHASE 1: WEIGHTED INDICATORS CONFIGURATION
-    indicators_config = {
-        # CRITICAL INDICATORS (Weight: 25-30)
-        'interest_rate': {
-            'weight': 30,
-            'optimal_min': 2.5,
-            'optimal_max': 4.0,
-            'danger_above': 5.5,
-            'impact': 'inverse',  # Higher = worse for property
-            'trend_matters': True,
-            'description': 'RBA Cash Rate'
-        },
-        'household_debt_gdp': {
-            'weight': 25,
-            'warning_above': 110,
-            'danger_above': 120,
-            'optimal_below': 100,
-            'impact': 'inverse',
-            'trend_matters': True,
-            'description': 'Debt to GDP Ratio'
-        },
-        
-        # HIGH IMPORTANCE (Weight: 15-20)
-        'rental_vacancy_rate': {
-            'weight': 20,
-            'optimal_below': 2.0,
-            'healthy_range': (1.5, 2.5),
-            'oversupply_above': 3.5,
-            'impact': 'inverse',
-            'trend_matters': True,
-            'description': 'Rental Vacancy'
-        },
-        'building_approvals': {
-            'weight': 15,
-            'optimal_above': 240000,
-            'deficit_below': 180000,
-            'crisis_below': 160000,
-            'impact': 'direct',  # Higher = better (more supply coming)
-            'trend_matters': True,
-            'description': 'Annual Building Approvals'
-        },
-        
-        # MEDIUM IMPORTANCE (Weight: 10-15)
-        'mortgage_stress_rate': {
-            'weight': 15,
-            'warning_above': 30,
-            'danger_above': 40,
-            'healthy_below': 25,
-            'impact': 'inverse',
-            'trend_matters': True,
-            'description': 'Mortgage Stress %'
-        },
-        'unemployment_rate': {
-            'weight': 10,
-            'warning_above': 5.0,
-            'danger_above': 6.0,
-            'healthy_below': 4.5,
-            'impact': 'inverse',
-            'trend_matters': True,
-            'description': 'Unemployment Rate'
-        },
-        'auction_clearance_rate': {
-            'weight': 10,
-            'healthy_above': 65,
-            'strong_above': 75,
-            'weak_below': 55,
-            'impact': 'direct',
-            'trend_matters': True,
-            'description': 'Auction Clearance %'
-        },
-        
-        # SUPPORTING INDICATORS (Weight: 5)
-        'credit_growth': {
-            'weight': 5,
-            'healthy_range': (0.3, 0.8),
-            'strong_above': 1.0,
-            'weak_below': 0.2,
-            'impact': 'direct',
-            'trend_matters': False,
-            'description': 'Monthly Credit Growth %'
-        },
-        'wage_growth': {
-            'weight': 5,
-            'healthy_range': (3.0, 4.0),
-            'strong_above': 4.0,
-            'weak_below': 2.5,
-            'impact': 'direct',
-            'trend_matters': False,
-            'description': 'Annual Wage Growth %'
-        },
-    }
+
+    # PHASE 1: WEIGHTED INDICATORS CONFIGURATION (module-scope; see INDICATORS_CONFIG above)
+    indicators_config = INDICATORS_CONFIG
     
     # Storage for calculation details
     indicator_scores = {}
@@ -2170,142 +2239,70 @@ def show_economic_indicators():
         """, (indicator_name,))
         result = cursor.fetchone()
         return result[0] if result else None
-    
+
+    def render_from_config(key, decimals=1, value_prefix=''):
+        """Render an indicator using INDICATORS_CONFIG for display name, target, and progress scale."""
+        config = INDICATORS_CONFIG.get(key, {})
+        display_name = config.get('display_name', key.replace('_', ' ').title())
+        unit = config.get('unit', '')
+        value = get_indicator_value(key)
+        st.markdown(f"**{display_name}**")
+        if value is not None:
+            target = indicator_target_text(config)
+            fmt = f"{value_prefix}{value:,.{decimals}f}" if decimals >= 0 else f"{value_prefix}{value:,.0f}"
+            target_md = f" | Target: {target}" if target else ""
+            st.markdown(f"Current: **{fmt}{unit}**{target_md}")
+            st.progress(indicator_progress_fraction(value, config))
+        else:
+            st.markdown("No data - Add in Data Management")
+
+    def render_non_config(key, display_name, decimals=1, value_prefix='', unit='', target_text=None, scale=None):
+        """Render an indicator not in INDICATORS_CONFIG (no score impact)."""
+        value = get_indicator_value(key)
+        st.markdown(f"**{display_name}**")
+        if value is not None:
+            fmt = f"{value_prefix}{value:,.{decimals}f}"
+            target_md = f" | Target: {target_text}" if target_text else ""
+            st.markdown(f"Current: **{fmt}{unit}**{target_md}")
+            if scale:
+                st.progress(min(1.0, max(0.0, value / scale)))
+        else:
+            st.markdown("No data - Add in Data Management")
+
     # Crash Risk Indicators
     st.subheader("🚨 Crash Risk Indicators")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
-        # Household Debt to GDP
-        debt_gdp = get_indicator_value('household_debt_gdp')
-        if debt_gdp:
-            st.markdown("**Household Debt to GDP**")
-            st.markdown(f"Current: **{debt_gdp:.1f}%** | Target: <110%")
-            st.progress(min(1.0, debt_gdp / 130))
-        else:
-            st.markdown("**Household Debt to GDP**")
-            st.markdown("No data - Add in Data Management")
-        
-        # Mortgage Stress Rate
-        stress_rate = get_indicator_value('mortgage_stress_rate')
-        if stress_rate:
-            st.markdown("**Mortgage Stress Rate**")
-            st.markdown(f"Current: **{stress_rate:.1f}%** | Target: <30%")
-            st.progress(min(1.0, stress_rate / 50))
-        else:
-            st.markdown("**Mortgage Stress Rate**")
-            st.markdown("No data - Add in Data Management")
-        
-        # Unemployment Rate
-        unemployment = get_indicator_value('unemployment_rate')
-        if unemployment:
-            st.markdown("**Unemployment Rate**")
-            st.markdown(f"Current: **{unemployment:.1f}%** | Target: <5%")
-            st.progress(min(1.0, unemployment / 6))
-        else:
-            st.markdown("**Unemployment Rate**")
-            st.markdown("No data - Add in Data Management")
-    
+        render_from_config('household_debt_gdp')
+        render_from_config('mortgage_stress_rate')
+        render_from_config('unemployment_rate')
+
     with col2:
-        # Interest Rate
-        interest_rate = get_indicator_value('interest_rate')
-        if interest_rate:
-            st.markdown("**Interest Rate (RBA Cash Rate)**")
-            st.markdown(f"Current: **{interest_rate:.2f}%**")
-            st.progress(min(1.0, interest_rate / 6))
-        else:
-            st.markdown("**Interest Rate**")
-            st.markdown("No data - Add in Data Management")
-        
-        # Auction Clearance Rate
-        clearance = get_indicator_value('auction_clearance_rate')
-        if clearance:
-            st.markdown("**Auction Clearance Rate**")
-            st.markdown(f"Current: **{clearance:.1f}%** | Target: >65%")
-            st.progress(clearance / 100)
-        else:
-            st.markdown("**Auction Clearance Rate**")
-            st.markdown("No data - Add in Data Management")
-        
-        # Building Approvals
-        approvals = get_indicator_value('building_approvals')
-        if approvals:
-            st.markdown("**Building Approvals (Annual)**")
-            st.markdown(f"Current: **{approvals:,.0f}** | Target: 240,000")
-            st.progress(min(1.0, approvals / 240000))
-        else:
-            st.markdown("**Building Approvals**")
-            st.markdown("No data - Add in Data Management")
-    
+        render_from_config('interest_rate', decimals=2)
+        render_from_config('auction_clearance_rate')
+        render_from_config('building_approvals', decimals=0)
+
     st.markdown("---")
-    
+
     # Growth Support Indicators
     st.subheader("💪 Growth Support Indicators")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
-        # Rental Vacancy Rate
-        vacancy = get_indicator_value('rental_vacancy_rate')
-        if vacancy:
-            st.markdown("**Rental Vacancy Rate**")
-            st.markdown(f"Current: **{vacancy:.1f}%** | Target: <2%")
-            st.progress(vacancy / 3)
-        else:
-            st.markdown("**Rental Vacancy Rate**")
-            st.markdown("No data - Add in Data Management")
-        
-        # Population Growth
-        pop_growth = get_indicator_value('population_growth')
-        if pop_growth:
-            st.markdown("**Population Growth (Annual)**")
-            st.markdown(f"Current: **+{pop_growth:,.0f}** people")
-            st.progress(min(1.0, pop_growth / 500000))
-        else:
-            st.markdown("**Population Growth**")
-            st.markdown("No data - Add in Data Management")
-        
-        # Credit Growth
-        credit_growth = get_indicator_value('credit_growth')
-        if credit_growth:
-            st.markdown("**Credit Growth (Monthly)**")
-            st.markdown(f"Current: **{credit_growth:.1f}%**")
-            st.progress(min(1.0, (credit_growth + 1) / 3))  # Normalize around 0
-        else:
-            st.markdown("**Credit Growth**")
-            st.markdown("No data - Add in Data Management")
-    
+        render_from_config('rental_vacancy_rate')
+        render_non_config('population_growth', 'Population Growth (Annual)',
+                          decimals=0, value_prefix='+', unit=' people', scale=500000)
+        render_from_config('credit_growth')
+
     with col2:
-        # Mortgage Arrears Rate
-        arrears = get_indicator_value('mortgage_arrears_rate')
-        if arrears:
-            st.markdown("**Mortgage Arrears Rate**")
-            st.markdown(f"Current: **{arrears:.1f}%** | Target: <2%")
-            st.progress(arrears / 3)
-        else:
-            st.markdown("**Mortgage Arrears Rate**")
-            st.markdown("No data - Add in Data Management")
-        
-        # Dwelling Supply Deficit
-        deficit = get_indicator_value('dwelling_supply_deficit')
-        if deficit:
-            st.markdown("**Dwelling Supply Deficit**")
-            st.markdown(f"Current: **{deficit:,.0f}** dwellings short")
-            st.progress(min(1.0, deficit / 300000))
-        else:
-            st.markdown("**Dwelling Supply Deficit**")
-            st.markdown("No data - Add in Data Management")
-        
-        # Wage Growth
-        wage_growth = get_indicator_value('wage_growth')
-        if wage_growth:
-            st.markdown("**Wage Growth (Annual)**")
-            st.markdown(f"Current: **{wage_growth:.1f}%**")
-            st.progress(min(1.0, wage_growth / 5))
-        else:
-            st.markdown("**Wage Growth**")
-            st.markdown("No data - Add in Data Management")
+        render_non_config('mortgage_arrears_rate', 'Mortgage Arrears Rate',
+                          decimals=1, unit='%', target_text='<2%', scale=3)
+        render_non_config('dwelling_supply_deficit', 'Dwelling Supply Deficit',
+                          decimals=0, unit=' dwellings short', scale=300000)
+        render_from_config('wage_growth')
     
     conn.close()
     
@@ -2321,24 +2318,20 @@ def show_economic_indicators():
     available_indicators = [row[0] for row in cursor.fetchall()]
     
     if available_indicators:
-        # Create friendly names mapping
-        friendly_names = {
-            'household_debt_gdp': 'Household Debt to GDP',
-            'interest_rate': 'Interest Rates',
-            'unemployment_rate': 'Unemployment Rate',
-            'rental_vacancy_rate': 'Rental Vacancy Rate',
-            'mortgage_stress_rate': 'Mortgage Stress Rate',
-            'auction_clearance_rate': 'Auction Clearance Rate',
-            'building_approvals': 'Building Approvals',
-            'credit_growth': 'Credit Growth',
+        # Friendly names: prefer INDICATORS_CONFIG display_name, fall back to extras for non-config indicators
+        friendly_names_extra = {
             'mortgage_arrears_rate': 'Mortgage Arrears Rate',
             'dwelling_supply_deficit': 'Dwelling Supply Deficit',
             'population_growth': 'Population Growth',
-            'wage_growth': 'Wage Growth',
         }
-        
+        def friendly(ind):
+            cfg = INDICATORS_CONFIG.get(ind)
+            if cfg and 'display_name' in cfg:
+                return cfg['display_name']
+            return friendly_names_extra.get(ind, ind.replace('_', ' ').title())
+
         # Display names for dropdown
-        display_names = [friendly_names.get(ind, ind.replace('_', ' ').title()) for ind in available_indicators]
+        display_names = [friendly(ind) for ind in available_indicators]
         
         selected_display = st.selectbox("Select indicator to visualize", display_names)
         
@@ -2357,18 +2350,21 @@ def show_economic_indicators():
         
         if not df.empty:
             df['date'] = pd.to_datetime(df['date'])
-            
-            # Set appropriate threshold based on indicator
-            thresholds = {
-                'household_debt_gdp': 110,
-                'interest_rate': 4.0,
-                'unemployment_rate': 5.0,
-                'rental_vacancy_rate': 2.0,
-                'mortgage_stress_rate': 30,
-                'auction_clearance_rate': 65,
-                'mortgage_arrears_rate': 2.0,
-            }
-            threshold = thresholds.get(indicator_name)
+
+            # Threshold: pull from INDICATORS_CONFIG (warning/danger level for inverse, healthy floor for direct)
+            # Fall back to a small extras dict for indicators not in config.
+            def trend_threshold(ind):
+                cfg = INDICATORS_CONFIG.get(ind)
+                if cfg:
+                    if cfg.get('impact') == 'inverse':
+                        return (cfg.get('warning_above')
+                                or cfg.get('danger_above')
+                                or cfg.get('optimal_below')
+                                or cfg.get('oversupply_above'))
+                    if cfg.get('impact') == 'direct':
+                        return cfg.get('healthy_above') or cfg.get('optimal_above')
+                return {'mortgage_arrears_rate': 2.0}.get(ind)
+            threshold = trend_threshold(indicator_name)
             
             fig = go.Figure()
             fig.add_trace(go.Scatter(
