@@ -709,6 +709,12 @@ MARKET_THRESHOLDS = {
         'high_scorer_alert_above': 35,     # "Score Alerts" list cutoff
         'max_score': 50,
     },
+    'infrastructure': {
+        'lead_time_months': (6, 18),        # lead time range for property price impact
+        'default_impact_radius_km': 5.0,    # default radius around project
+        'budget_tiers_m': [1000, 500, 100], # budget thresholds in $M (descending)
+        'budget_scores': [3.0, 2.0, 1.5, 1.0],  # scores per tier (+ below-all fallback)
+    },
 }
 
 
@@ -2923,41 +2929,107 @@ def show_anderson_tracker():
     | {cycle_start}-{cycle_end_year} | {cycle_start} | **{predicted_peak_year}** | **{crash_start_year}-{crash_end_year}** | {accuracy} |
     """)
 
-    # Current signals
+    # Current signals — generated from cycle position and indicator data
     st.markdown("---")
     st.subheader("Current Cycle Signals")
+
+    # Column 1: dynamically mark which phases have been seen
+    seen_signals = []
+    if cycle_position >= 7:
+        seen_signals.append(f"- Phase 1 Recovery ({cycle_start}-{cycle_start + 7}) ✓")
+    if cycle_position >= 9:
+        seen_signals.append(f"- Mid-cycle dip ({cycle_start + 7}-{cycle_start + 9}) ✓")
+    if cycle_position >= 14:
+        seen_signals.append(f"- Phase 2 Boom ({cycle_start + 9}-{cycle_start + 14}) ✓")
+    if cycle_position >= 16:
+        seen_signals.append(f"- Winner's Curse ({cycle_start + 14}-{cycle_start + 16}) ✓")
+    if cycle_position >= cycle_length:
+        seen_signals.append(f"- Crash/Reset ({cycle_start + 16}-{cycle_end_year}) ✓")
+    if not seen_signals:
+        seen_signals.append("- Cycle recently started — no completed phases yet")
+
+    # Column 2 & 3: phase-dependent warning signs and what to watch
+    if cycle_position < 7:
+        warning_signs = [
+            "- Credit still tight",
+            "- Sentiment negative",
+            "- Low transaction volumes",
+            "- Slow price recovery",
+        ]
+        what_to_watch = [
+            "- First rate cuts signalling easing",
+            "- Credit conditions loosening",
+            "- Early price stabilisation",
+            "- Investor confidence returning",
+        ]
+    elif cycle_position < 9:
+        warning_signs = [
+            "- Temporary price correction",
+            "- Economic slowdown signals",
+            "- Rising unemployment risk",
+            "- Credit pullback",
+        ]
+        what_to_watch = [
+            "- Recovery in clearance rates",
+            "- Stabilising prices post-dip",
+            "- Government stimulus measures",
+            "- Phase 2 boom ignition signals",
+        ]
+    elif cycle_position < 14:
+        warning_signs = [
+            "- Leverage increasing rapidly",
+            "- FOMO-driven buying spreading",
+            "- Speculative activity rising",
+            "- Regional markets overheating",
+        ]
+        what_to_watch = [
+            "- Rate hike cycle starting",
+            "- Credit tightening signals",
+            "- Supply pipeline ramping up",
+            "- Affordability stress building",
+        ]
+    elif cycle_position < 16:
+        warning_signs = [
+            "- Capital city price weakness",
+            "- Extreme household debt levels",
+            "- Universal bullish sentiment",
+            "- Rate hikes squeezing borrowers",
+            "- Speculation disconnected from fundamentals",
+        ]
+        what_to_watch = [
+            f"- Price falls in lead markets",
+            "- Credit tightening accelerating",
+            "- Unemployment ticking up",
+            "- Forced sales increasing",
+            "- Sentiment shift from greed to fear",
+        ]
+    else:
+        warning_signs = [
+            "- Prices falling across markets",
+            "- Credit freeze or severe tightening",
+            "- Rising mortgage defaults",
+            "- Forced sales and distressed assets",
+        ]
+        what_to_watch = [
+            "- Price stabilisation signals (bottom)",
+            "- Central bank pivoting to rate cuts",
+            "- Credit loosening for first-home buyers",
+            f"- Next cycle start (~{cycle_end_year})",
+        ]
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
         st.markdown("**✅ Signals We've Seen**")
-        st.markdown("""
-        - Mid-cycle slowdown (2018-19) ✓
-        - COVID recession (2020) ✓
-        - Explosive Phase 2 growth ✓
-        - Regional market surge ✓
-        - FOMO and speculation ✓
-        """)
+        st.markdown("\n".join(seen_signals))
 
     with col2:
-        st.markdown("**⚠️ Peak Warning Signs**")
-        st.markdown("""
-        - Sydney/Melbourne weakening
-        - Extreme debt levels
-        - Universal bullishness
-        - "Property only goes up"
-        - Rate hikes not cuts
-        """)
+        st.markdown("**⚠️ Warning Signs to Monitor**")
+        st.markdown("\n".join(warning_signs))
 
     with col3:
-        st.markdown("**🔮 What to Watch**")
-        st.markdown("""
-        - Further Sydney/Melbourne falls
-        - Credit tightening
-        - Unemployment rising
-        - Forced sales increasing
-        - Sentiment shift
-        """)
+        st.markdown("**🔮 What to Watch Next**")
+        st.markdown("\n".join(what_to_watch))
 
     # Anderson's recommendation - dynamic based on current phase
     st.markdown("---")
@@ -3270,7 +3342,8 @@ def show_data_management():
                                         row.get('expected_completion_date', None),
                                         row.get('latitude', None),
                                         row.get('longitude', None),
-                                        row.get('impact_radius_km', 5.0),
+                                        row.get('impact_radius_km',
+                                               MARKET_THRESHOLDS['infrastructure']['default_impact_radius_km']),
                                         row.get('source', 'CSV Import'),
                                         row.get('notes', None)
                                     )
@@ -4127,7 +4200,8 @@ Please analyze this data and provide insights on:
 def show_leading_indicators():
     """Main page for leading indicators with tab navigation"""
     st.header("📡 Leading Indicators")
-    st.markdown("Track forward-looking signals that predict property market movements 6-18 months ahead.")
+    _lt = MARKET_THRESHOLDS['infrastructure']['lead_time_months']
+    st.markdown(f"Track forward-looking signals that predict property market movements {_lt[0]}-{_lt[1]} months ahead.")
     st.markdown("---")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -4152,8 +4226,11 @@ def show_leading_indicators():
 def show_infrastructure_tracker():
     """Display infrastructure projects and impact analysis"""
     st.subheader("🚇 Infrastructure Project Tracker")
-    st.markdown("Infrastructure investment has a **6-18 month lead time** on property prices. "
-                "Properties within 5 km of major projects typically see above-average growth.")
+    _inf = MARKET_THRESHOLDS['infrastructure']
+    _lt = _inf['lead_time_months']
+    _radius = _inf['default_impact_radius_km']
+    st.markdown(f"Infrastructure investment has a **{_lt[0]}-{_lt[1]} month lead time** on property prices. "
+                f"Properties within {_radius:.0f} km of major projects typically see above-average growth.")
 
     view_tab, add_tab, import_tab = st.tabs(["Active Projects", "Add Project", "CSV Import"])
 
@@ -4248,7 +4325,9 @@ def show_infrastructure_tracker():
                 construction_start = st.date_input("Construction Start Date")
             with col4:
                 longitude = st.number_input("Longitude", value=0.0, format="%.6f")
-                impact_radius = st.number_input("Impact Radius (km)", value=5.0, min_value=0.1, step=0.5)
+                impact_radius = st.number_input("Impact Radius (km)",
+                    value=MARKET_THRESHOLDS['infrastructure']['default_impact_radius_km'],
+                    min_value=0.1, step=0.5)
 
             source = st.text_input("Source (e.g. government website)")
             notes = st.text_area("Notes")
@@ -4298,7 +4377,8 @@ def show_infrastructure_tracker():
                 row.get('status', 'announced'), row.get('budget_millions', None),
                 row.get('announcement_date', None), row.get('construction_start_date', None),
                 row.get('expected_completion_date', None), row.get('latitude', None),
-                row.get('longitude', None), row.get('impact_radius_km', 5.0),
+                row.get('longitude', None),
+                row.get('impact_radius_km', MARKET_THRESHOLDS['infrastructure']['default_impact_radius_km']),
                 row.get('source', 'CSV Import'), row.get('notes', None)
             )
         )
@@ -4318,18 +4398,18 @@ def calculate_infrastructure_score(conn, suburb, state):
     if df.empty:
         return 0.0
 
-    # Simple scoring: each active project adds points, weighted by budget
+    # Score each project by budget tier (thresholds from config)
+    budget_tiers = MARKET_THRESHOLDS['infrastructure']['budget_tiers_m']
+    budget_scores = MARKET_THRESHOLDS['infrastructure']['budget_scores']
     score = 0.0
     for _, row in df.iterrows():
         budget = row.get('budget_millions', 0) or 0
-        if budget >= 1000:
-            score += 3.0
-        elif budget >= 500:
-            score += 2.0
-        elif budget >= 100:
-            score += 1.5
-        else:
-            score += 1.0
+        added = budget_scores[-1]  # fallback: smallest tier
+        for tier_threshold, tier_score in zip(budget_tiers, budget_scores):
+            if budget >= tier_threshold:
+                added = tier_score
+                break
+        score += added
         # Bonus for construction phase (more certain)
         if row.get('status') == 'construction':
             score += 0.5
