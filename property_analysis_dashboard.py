@@ -26,6 +26,20 @@ import numpy as np
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2 import extensions as _pg_ext
+
+# Make PostgreSQL NUMERIC/DECIMAL columns come back as Python floats instead of
+# Decimal objects. The economic_indicators_combined view UNIONs the REAL column
+# from economic_indicators with the NUMERIC column from economic_indicators_history,
+# which resolves to NUMERIC -> psycopg2 returns Decimal. Decimals don't JSON-encode
+# for Plotly (charts render blank/wrong) and raise TypeError when mixed with floats
+# in score arithmetic. Registering this caster fixes both classes of bug app-wide.
+_DEC2FLOAT = _pg_ext.new_type(
+    _pg_ext.DECIMAL.values,
+    "DEC2FLOAT",
+    lambda value, curs: float(value) if value is not None else None,
+)
+_pg_ext.register_type(_DEC2FLOAT)
 
 def get_db_connection():
     """Get database connection - works with both local SQLite and Supabase PostgreSQL"""
@@ -2527,7 +2541,12 @@ def show_economic_indicators():
         
         if not df.empty:
             df['date'] = pd.to_datetime(df['date'])
+            # Coerce values to numeric and drop anything unparseable so a single bad
+            # row can't break the trace. Re-sort by date after the combined-view UNION.
+            df['value'] = pd.to_numeric(df['value'], errors='coerce')
+            df = df.dropna(subset=['value']).sort_values('date').reset_index(drop=True)
 
+        if not df.empty:
             # Threshold: pull from INDICATORS_CONFIG (warning/danger level for inverse, healthy floor for direct)
             # Fall back to a small extras dict for indicators not in config.
             def trend_threshold(ind):
