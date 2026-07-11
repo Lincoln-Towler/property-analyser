@@ -1,0 +1,2120 @@
+{
+  "generated_on": "2026-07-11",
+  "current_year": 2026,
+  "scenarios": {
+    "baseline": {
+      "inputs": {
+        "indicators": [
+          {
+            "name": "interest_rate",
+            "date": "2026-02-11",
+            "value": 4.35
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-04-12",
+            "value": 4.1
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-06-11",
+            "value": 3.85
+          },
+          {
+            "name": "household_debt_gdp",
+            "date": "2025-12-23",
+            "value": 112.0
+          },
+          {
+            "name": "household_debt_gdp",
+            "date": "2026-04-02",
+            "value": 111.0
+          },
+          {
+            "name": "household_debt_gdp",
+            "date": "2026-06-21",
+            "value": 109.5
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-03-13",
+            "value": 1.6
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-05-12",
+            "value": 1.7
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-07-01",
+            "value": 1.8
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-02-01",
+            "value": 165000
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-04-22",
+            "value": 170000
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-06-26",
+            "value": 172000
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-02-21",
+            "value": 28.0
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-05-02",
+            "value": 27.5
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-06-16",
+            "value": 26.0
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-03-03",
+            "value": 4.2
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-05-07",
+            "value": 4.3
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-06-29",
+            "value": 4.4
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-04-02",
+            "value": 68.0
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-05-22",
+            "value": 71.0
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-07-03",
+            "value": 74.0
+          },
+          {
+            "name": "credit_growth",
+            "date": "2026-03-23",
+            "value": 0.5
+          },
+          {
+            "name": "credit_growth",
+            "date": "2026-05-17",
+            "value": 0.6
+          },
+          {
+            "name": "credit_growth",
+            "date": "2026-06-23",
+            "value": 0.65
+          },
+          {
+            "name": "wage_growth",
+            "date": "2026-01-12",
+            "value": 3.4
+          },
+          {
+            "name": "wage_growth",
+            "date": "2026-04-12",
+            "value": 3.5
+          },
+          {
+            "name": "wage_growth",
+            "date": "2026-06-19",
+            "value": 3.6
+          }
+        ],
+        "property_data": []
+      },
+      "v2": {
+        "score": 58.5,
+        "signal": "\ud83d\udfe1 Moderate Buy",
+        "breakdown": {
+          "base_score": 65.0,
+          "cycle_multiplier": 0.9,
+          "final_score": 58.5,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 3.85,
+              "score": 80,
+              "trend": "falling",
+              "trend_change": -6.0975609756097455,
+              "trend_bonus": 10,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "household_debt_gdp": {
+              "value": 109.5,
+              "score": 50,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 25,
+              "description": "Debt to GDP Ratio"
+            },
+            "rental_vacancy_rate": {
+              "value": 1.8,
+              "score": 85,
+              "trend": "rising",
+              "trend_change": 5.882352941176476,
+              "trend_bonus": -10,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "building_approvals": {
+              "value": 172000.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 1.1764705882352942,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Annual Building Approvals"
+            },
+            "mortgage_stress_rate": {
+              "value": 26.0,
+              "score": 50,
+              "trend": "falling",
+              "trend_change": -5.454545454545454,
+              "trend_bonus": 10,
+              "weight": 15,
+              "description": "Mortgage Stress %"
+            },
+            "unemployment_rate": {
+              "value": 4.4,
+              "score": 75,
+              "trend": "stable",
+              "trend_change": 2.32558139534885,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Unemployment Rate"
+            },
+            "auction_clearance_rate": {
+              "value": 74.0,
+              "score": 65,
+              "trend": "stable",
+              "trend_change": 4.225352112676056,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Auction Clearance %"
+            },
+            "credit_growth": {
+              "value": 0.65,
+              "score": 50,
+              "trend": "n/a",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 5,
+              "description": "Monthly Credit Growth %"
+            },
+            "wage_growth": {
+              "value": 3.6,
+              "score": 50,
+              "trend": "n/a",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 5,
+              "description": "Annual Wage Growth %"
+            }
+          },
+          "data_completeness": 100.0,
+          "total_weight": 135
+        }
+      },
+      "v3": {
+        "score": 58.5,
+        "signal": "\ud83d\udfe1 Moderate Buy",
+        "breakdown": {
+          "base_score": 65.0,
+          "cycle_multiplier": 0.9,
+          "final_score": 58.5,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 3.85,
+              "score": 80,
+              "trend": "falling",
+              "trend_change": -6.0975609756097455,
+              "trend_bonus": 10,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "household_debt_gdp": {
+              "value": 109.5,
+              "score": 50,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 25,
+              "description": "Debt to GDP Ratio"
+            },
+            "rental_vacancy_rate": {
+              "value": 1.8,
+              "score": 85,
+              "trend": "rising",
+              "trend_change": 5.882352941176476,
+              "trend_bonus": -10,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "building_approvals": {
+              "value": 172000.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 1.1764705882352942,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Annual Building Approvals"
+            },
+            "mortgage_stress_rate": {
+              "value": 26.0,
+              "score": 50,
+              "trend": "falling",
+              "trend_change": -5.454545454545454,
+              "trend_bonus": 10,
+              "weight": 15,
+              "description": "Mortgage Stress %"
+            },
+            "unemployment_rate": {
+              "value": 4.4,
+              "score": 75,
+              "trend": "stable",
+              "trend_change": 2.32558139534885,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Unemployment Rate"
+            },
+            "auction_clearance_rate": {
+              "value": 74.0,
+              "score": 65,
+              "trend": "stable",
+              "trend_change": 4.225352112676056,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Auction Clearance %"
+            },
+            "credit_growth": {
+              "value": 0.65,
+              "score": 50,
+              "trend": "n/a",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 5,
+              "description": "Monthly Credit Growth %"
+            },
+            "wage_growth": {
+              "value": 3.6,
+              "score": 50,
+              "trend": "n/a",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 5,
+              "description": "Annual Wage Growth %"
+            }
+          },
+          "data_completeness": 100.0,
+          "total_weight": 135,
+          "volatility_analysis": {
+            "interest_rate": {
+              "penalty": 0,
+              "std_dev": 0.2,
+              "level": "low"
+            },
+            "household_debt_gdp": {
+              "penalty": 0,
+              "std_dev": 0,
+              "level": "insufficient_data"
+            },
+            "mortgage_stress_rate": {
+              "penalty": 0,
+              "std_dev": 0.85,
+              "level": "low"
+            },
+            "rental_vacancy_rate": {
+              "penalty": 0,
+              "std_dev": 0.08,
+              "level": "low"
+            },
+            "unemployment_rate": {
+              "penalty": 0,
+              "std_dev": 0.08,
+              "level": "low"
+            }
+          },
+          "total_volatility_penalty": 0,
+          "score_after_volatility": 65.0,
+          "score_after_cycle": 58.5,
+          "sub_scores": {
+            "affordability": 62.0,
+            "supply_demand": 52.5,
+            "financial_stress": 60.0,
+            "momentum": 52.9,
+            "trend_breakdown": {
+              "rising": 1,
+              "falling": 2,
+              "stable": 4
+            }
+          },
+          "regional_analysis": null,
+          "confidence_interval": {
+            "lower": 58.5,
+            "upper": 58.5,
+            "level": "High",
+            "range": 0.0
+          },
+          "final_score_v3": 58.5
+        }
+      },
+      "commentary": "**Current Market Assessment**\n\nMarket Score: **58/100** \u2014 \ud83d\udfe1 Moderate Buy\nCycle Position: **Year 15.0 of 18.6** (Winner's Curse / Peak)\n\n**Bearish Factors:**\n- **Building Approvals (Annual)**: deficit (172,000)\n\n**Bullish Factors:**\n- **Interest Rate (RBA Cash Rate)**: in optimal range (3.85%)\n- **Rental Vacancy Rate**: in optimal zone (1.80%)\n- **Unemployment Rate**: healthy (4.40%)\n- **Auction Clearance Rate**: healthy (74.00%)\n- **Credit Growth (Monthly)**: healthy (0.65%)\n- **Wage Growth (Annual)**: healthy (3.60%)\n\n**Neutral / Watch:**\n- **Household Debt to GDP**: at 109.50%\n- **Mortgage Stress Rate**: at 26.00%\n\n**Recommendation:** Balanced conditions \u2014 focus on quality over quantity and stress-test cash flow.\n\n_Auto-generated from latest indicator data on 2026-07-11._"
+    },
+    "perfect_storm": {
+      "inputs": {
+        "indicators": [
+          {
+            "name": "interest_rate",
+            "date": "2026-05-12",
+            "value": 6.0
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-06-11",
+            "value": 6.2
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-07-06",
+            "value": 6.4
+          },
+          {
+            "name": "household_debt_gdp",
+            "date": "2026-05-12",
+            "value": 125.0
+          },
+          {
+            "name": "household_debt_gdp",
+            "date": "2026-06-11",
+            "value": 126.0
+          },
+          {
+            "name": "household_debt_gdp",
+            "date": "2026-07-06",
+            "value": 127.0
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-05-12",
+            "value": 37.0
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-06-11",
+            "value": 38.0
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-07-06",
+            "value": 39.0
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-05-12",
+            "value": 5.2
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-06-11",
+            "value": 5.4
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-07-06",
+            "value": 5.6
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-05-12",
+            "value": 2.8
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-06-11",
+            "value": 2.9
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-07-06",
+            "value": 3.0
+          }
+        ],
+        "property_data": []
+      },
+      "v2": {
+        "score": 22.5,
+        "signal": "\ud83d\udd34 Wait",
+        "breakdown": {
+          "base_score": 25,
+          "cycle_multiplier": 0.9,
+          "final_score": 22.5,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [
+            "\u26a0\ufe0f PERFECT STORM: High debt + High rates + High stress"
+          ],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 6.4,
+              "score": 15,
+              "trend": "stable",
+              "trend_change": 3.2258064516129057,
+              "trend_bonus": 0,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "household_debt_gdp": {
+              "value": 127.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 0.7936507936507936,
+              "trend_bonus": 0,
+              "weight": 25,
+              "description": "Debt to GDP Ratio"
+            },
+            "rental_vacancy_rate": {
+              "value": 3.0,
+              "score": 50,
+              "trend": "stable",
+              "trend_change": 3.448275862068969,
+              "trend_bonus": 0,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "mortgage_stress_rate": {
+              "value": 39.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 2.631578947368421,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Mortgage Stress %"
+            },
+            "unemployment_rate": {
+              "value": 5.6,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 3.7037037037036904,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Unemployment Rate"
+            }
+          },
+          "data_completeness": 55.6,
+          "total_weight": 100
+        }
+      },
+      "v3": {
+        "score": 22.5,
+        "signal": "\ud83d\udd34 Wait",
+        "breakdown": {
+          "base_score": 25,
+          "cycle_multiplier": 0.9,
+          "final_score": 22.5,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [
+            "\u26a0\ufe0f PERFECT STORM: High debt + High rates + High stress"
+          ],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 6.4,
+              "score": 15,
+              "trend": "stable",
+              "trend_change": 3.2258064516129057,
+              "trend_bonus": 0,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "household_debt_gdp": {
+              "value": 127.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 0.7936507936507936,
+              "trend_bonus": 0,
+              "weight": 25,
+              "description": "Debt to GDP Ratio"
+            },
+            "rental_vacancy_rate": {
+              "value": 3.0,
+              "score": 50,
+              "trend": "stable",
+              "trend_change": 3.448275862068969,
+              "trend_bonus": 0,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "mortgage_stress_rate": {
+              "value": 39.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 2.631578947368421,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Mortgage Stress %"
+            },
+            "unemployment_rate": {
+              "value": 5.6,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 3.7037037037036904,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Unemployment Rate"
+            }
+          },
+          "data_completeness": 55.6,
+          "total_weight": 100,
+          "volatility_analysis": {
+            "interest_rate": {
+              "penalty": 0,
+              "std_dev": 0.16,
+              "level": "low"
+            },
+            "household_debt_gdp": {
+              "penalty": 0,
+              "std_dev": 0.82,
+              "level": "low"
+            },
+            "mortgage_stress_rate": {
+              "penalty": 0,
+              "std_dev": 0.82,
+              "level": "low"
+            },
+            "rental_vacancy_rate": {
+              "penalty": 0,
+              "std_dev": 0.08,
+              "level": "low"
+            },
+            "unemployment_rate": {
+              "penalty": 0,
+              "std_dev": 0.16,
+              "level": "low"
+            }
+          },
+          "total_volatility_penalty": 0,
+          "score_after_volatility": 25,
+          "score_after_cycle": 22.5,
+          "sub_scores": {
+            "affordability": 27.0,
+            "supply_demand": 17.5,
+            "financial_stress": 28.0,
+            "momentum": 50.0,
+            "trend_breakdown": {
+              "rising": 0,
+              "falling": 0,
+              "stable": 5
+            }
+          },
+          "regional_analysis": null,
+          "confidence_interval": {
+            "lower": 18.1,
+            "upper": 26.9,
+            "level": "High",
+            "range": 8.8
+          },
+          "final_score_v3": 22.5
+        }
+      },
+      "commentary": "**Current Market Assessment**\n\nMarket Score: **22/100** \u2014 \ud83d\udd34 Wait\nCycle Position: **Year 15.0 of 18.6** (Winner's Curse / Peak)\n\n**Bearish Factors:**\n- **Interest Rate (RBA Cash Rate)**: at danger level (6.40%, >5.5%)\n- **Household Debt to GDP**: at danger level (127.00%, >120%)\n- **Mortgage Stress Rate**: above warning (39.00%, >30%)\n- **Unemployment Rate**: above warning (5.60%, >5.0%)\n\n**Neutral / Watch:**\n- **Rental Vacancy Rate**: at 3.00%\n\n**Recommendation:** Downturn risk high \u2014 hold cash, wait for clearer bottom signals.\n\n_Auto-generated from latest indicator data on 2026-07-11._"
+    },
+    "crisis": {
+      "inputs": {
+        "indicators": [
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-04-12",
+            "value": 35.0
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-05-12",
+            "value": 41.0
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-06-11",
+            "value": 44.0
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-07-06",
+            "value": 47.0
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-04-12",
+            "value": 5.5
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-05-12",
+            "value": 6.2
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-06-11",
+            "value": 6.8
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-07-06",
+            "value": 7.4
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-04-12",
+            "value": 5.0
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-05-12",
+            "value": 5.6
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-06-11",
+            "value": 6.1
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-07-06",
+            "value": 6.6
+          }
+        ],
+        "property_data": []
+      },
+      "v2": {
+        "score": 12.681818181818183,
+        "signal": "\ud83d\udd34 Wait (Low Confidence)",
+        "breakdown": {
+          "base_score": 14.1,
+          "cycle_multiplier": 0.9,
+          "final_score": 12.7,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [
+            "\ud83d\udea8 CRISIS: Extreme mortgage stress + Rising unemployment"
+          ],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 6.6,
+              "score": 15,
+              "trend": "rising",
+              "trend_change": 8.196721311475411,
+              "trend_bonus": -10,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "mortgage_stress_rate": {
+              "value": 47.0,
+              "score": 35,
+              "trend": "rising",
+              "trend_change": 6.8181818181818175,
+              "trend_bonus": -10,
+              "weight": 15,
+              "description": "Mortgage Stress %"
+            },
+            "unemployment_rate": {
+              "value": 7.4,
+              "score": 35,
+              "trend": "rising",
+              "trend_change": 8.823529411764714,
+              "trend_bonus": -10,
+              "weight": 10,
+              "description": "Unemployment Rate"
+            }
+          },
+          "data_completeness": 33.3,
+          "total_weight": 55
+        }
+      },
+      "v3": {
+        "score": 0,
+        "signal": "\ud83d\udd34 Wait (Low Confidence)",
+        "breakdown": {
+          "base_score": 14.1,
+          "cycle_multiplier": 0.9,
+          "final_score": 12.7,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [
+            "\ud83d\udea8 CRISIS: Extreme mortgage stress + Rising unemployment"
+          ],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 6.6,
+              "score": 15,
+              "trend": "rising",
+              "trend_change": 8.196721311475411,
+              "trend_bonus": -10,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "mortgage_stress_rate": {
+              "value": 47.0,
+              "score": 35,
+              "trend": "rising",
+              "trend_change": 6.8181818181818175,
+              "trend_bonus": -10,
+              "weight": 15,
+              "description": "Mortgage Stress %"
+            },
+            "unemployment_rate": {
+              "value": 7.4,
+              "score": 35,
+              "trend": "rising",
+              "trend_change": 8.823529411764714,
+              "trend_bonus": -10,
+              "weight": 10,
+              "description": "Unemployment Rate"
+            }
+          },
+          "data_completeness": 33.3,
+          "total_weight": 55,
+          "volatility_analysis": {
+            "interest_rate": {
+              "penalty": -5,
+              "std_dev": 0.59,
+              "level": "high"
+            },
+            "mortgage_stress_rate": {
+              "penalty": -5,
+              "std_dev": 4.44,
+              "level": "high"
+            },
+            "unemployment_rate": {
+              "penalty": -5,
+              "std_dev": 0.7,
+              "level": "high"
+            }
+          },
+          "total_volatility_penalty": -15,
+          "score_after_volatility": -0.9,
+          "score_after_cycle": -0.8,
+          "sub_scores": {
+            "affordability": 16.5,
+            "supply_demand": 50,
+            "financial_stress": 28.0,
+            "momentum": 30.0,
+            "trend_breakdown": {
+              "rising": 3,
+              "falling": 0,
+              "stable": 0
+            }
+          },
+          "regional_analysis": null,
+          "confidence_interval": {
+            "lower": 0,
+            "upper": 11.9,
+            "level": "Low",
+            "range": 11.9
+          },
+          "final_score_v3": 0
+        }
+      },
+      "commentary": "**Current Market Assessment**\n\nMarket Score: **0/100** \u2014 \ud83d\udd34 Wait (Low Confidence)\nCycle Position: **Year 15.0 of 18.6** (Winner's Curse / Peak)\n\n**Bearish Factors:**\n- **Interest Rate (RBA Cash Rate)**: at danger level (6.60%, >5.5%)\n- **Mortgage Stress Rate**: at danger level (47.00%, >40%)\n- **Unemployment Rate**: at danger level (7.40%, >6.0%)\n\n**Recommendation:** Downturn risk high \u2014 hold cash, wait for clearer bottom signals.\n\n_Auto-generated from latest indicator data on 2026-07-11._"
+    },
+    "supply_squeeze": {
+      "inputs": {
+        "indicators": [
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-04-22",
+            "value": 1.2
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-06-01",
+            "value": 1.1
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-07-01",
+            "value": 1.0
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-04-22",
+            "value": 155000
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-06-01",
+            "value": 152000
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-07-01",
+            "value": 150000
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-04-22",
+            "value": 72.0
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-06-01",
+            "value": 74.0
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-07-01",
+            "value": 76.0
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-04-22",
+            "value": 3.5
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-06-01",
+            "value": 3.5
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-07-01",
+            "value": 3.5
+          },
+          {
+            "name": "wage_growth",
+            "date": "2026-04-22",
+            "value": 3.5
+          },
+          {
+            "name": "wage_growth",
+            "date": "2026-06-01",
+            "value": 3.5
+          },
+          {
+            "name": "wage_growth",
+            "date": "2026-07-01",
+            "value": 3.5
+          }
+        ],
+        "property_data": []
+      },
+      "v2": {
+        "score": 79.03125,
+        "signal": "\ud83d\udfe2 Strong Buy",
+        "breakdown": {
+          "base_score": 87.8,
+          "cycle_multiplier": 0.9,
+          "final_score": 79.0,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [
+            "\u2728 OPPORTUNITY: Severe supply shortage + Strong demand"
+          ],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 3.5,
+              "score": 80,
+              "trend": "stable",
+              "trend_change": 0.0,
+              "trend_bonus": 0,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "rental_vacancy_rate": {
+              "value": 1.0,
+              "score": 85,
+              "trend": "falling",
+              "trend_change": -9.090909090909099,
+              "trend_bonus": 10,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "building_approvals": {
+              "value": 150000.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": -1.3157894736842104,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Annual Building Approvals"
+            },
+            "auction_clearance_rate": {
+              "value": 76.0,
+              "score": 75,
+              "trend": "stable",
+              "trend_change": 2.7027027027027026,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Auction Clearance %"
+            },
+            "wage_growth": {
+              "value": 3.5,
+              "score": 50,
+              "trend": "n/a",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 5,
+              "description": "Annual Wage Growth %"
+            }
+          },
+          "data_completeness": 55.6,
+          "total_weight": 80
+        }
+      },
+      "v3": {
+        "score": 77.22,
+        "signal": "\ud83d\udfe2 Strong Buy (Medium Confidence)",
+        "breakdown": {
+          "base_score": 87.8,
+          "cycle_multiplier": 0.9,
+          "final_score": 79.0,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [
+            "\u2728 OPPORTUNITY: Severe supply shortage + Strong demand"
+          ],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 3.5,
+              "score": 80,
+              "trend": "stable",
+              "trend_change": 0.0,
+              "trend_bonus": 0,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "rental_vacancy_rate": {
+              "value": 1.0,
+              "score": 85,
+              "trend": "falling",
+              "trend_change": -9.090909090909099,
+              "trend_bonus": 10,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "building_approvals": {
+              "value": 150000.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": -1.3157894736842104,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Annual Building Approvals"
+            },
+            "auction_clearance_rate": {
+              "value": 76.0,
+              "score": 75,
+              "trend": "stable",
+              "trend_change": 2.7027027027027026,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Auction Clearance %"
+            },
+            "wage_growth": {
+              "value": 3.5,
+              "score": 50,
+              "trend": "n/a",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 5,
+              "description": "Annual Wage Growth %"
+            }
+          },
+          "data_completeness": 55.6,
+          "total_weight": 80,
+          "volatility_analysis": {
+            "interest_rate": {
+              "penalty": 0,
+              "std_dev": 0.0,
+              "level": "low"
+            },
+            "rental_vacancy_rate": {
+              "penalty": -2,
+              "std_dev": 0.08,
+              "level": "moderate"
+            }
+          },
+          "total_volatility_penalty": -2,
+          "score_after_volatility": 85.8,
+          "score_after_cycle": 77.2,
+          "sub_scores": {
+            "affordability": 32.0,
+            "supply_demand": 49.5,
+            "financial_stress": 50,
+            "momentum": 55.0,
+            "trend_breakdown": {
+              "rising": 0,
+              "falling": 1,
+              "stable": 3
+            }
+          },
+          "regional_analysis": null,
+          "confidence_interval": {
+            "lower": 71.8,
+            "upper": 82.7,
+            "level": "Medium",
+            "range": 10.9
+          },
+          "final_score_v3": 77.2
+        }
+      },
+      "commentary": "**Current Market Assessment**\n\nMarket Score: **77/100** \u2014 \ud83d\udfe2 Strong Buy (Medium Confidence)\nCycle Position: **Year 15.0 of 18.6** (Winner's Curse / Peak)\n\n**Bearish Factors:**\n- **Building Approvals (Annual)**: at crisis level (150,000)\n\n**Bullish Factors:**\n- **Interest Rate (RBA Cash Rate)**: in optimal range (3.50%)\n- **Rental Vacancy Rate**: in optimal zone (1.00%)\n- **Auction Clearance Rate**: healthy (76.00%)\n- **Wage Growth (Annual)**: healthy (3.50%)\n\n**Recommendation:** Strong fundamentals across the board \u2014 consider acquisitions in well-located suburbs.\n\n_Auto-generated from latest indicator data on 2026-07-11._"
+    },
+    "oversupply": {
+      "inputs": {
+        "indicators": [
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-04-22",
+            "value": 3.8
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-06-01",
+            "value": 4.0
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-07-01",
+            "value": 4.2
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-04-22",
+            "value": 255000
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-06-01",
+            "value": 260000
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-07-01",
+            "value": 265000
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-04-22",
+            "value": 52.0
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-06-01",
+            "value": 50.0
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-07-01",
+            "value": 48.0
+          }
+        ],
+        "property_data": []
+      },
+      "v2": {
+        "score": 36.0,
+        "signal": "\ud83d\udfe0 Caution (Low Confidence)",
+        "breakdown": {
+          "base_score": 40.0,
+          "cycle_multiplier": 0.9,
+          "final_score": 36.0,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [
+            "\u26a0\ufe0f OVERSUPPLY: High vacancy + Excessive building"
+          ],
+          "indicator_scores": {
+            "rental_vacancy_rate": {
+              "value": 4.2,
+              "score": 50,
+              "trend": "rising",
+              "trend_change": 5.000000000000004,
+              "trend_bonus": -10,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "building_approvals": {
+              "value": 265000.0,
+              "score": 85,
+              "trend": "stable",
+              "trend_change": 1.9230769230769231,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Annual Building Approvals"
+            },
+            "auction_clearance_rate": {
+              "value": 48.0,
+              "score": 40,
+              "trend": "stable",
+              "trend_change": -4.0,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Auction Clearance %"
+            }
+          },
+          "data_completeness": 33.3,
+          "total_weight": 45
+        }
+      },
+      "v3": {
+        "score": 36.0,
+        "signal": "\ud83d\udfe0 Caution (Medium Confidence)",
+        "breakdown": {
+          "base_score": 40.0,
+          "cycle_multiplier": 0.9,
+          "final_score": 36.0,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [
+            "\u26a0\ufe0f OVERSUPPLY: High vacancy + Excessive building"
+          ],
+          "indicator_scores": {
+            "rental_vacancy_rate": {
+              "value": 4.2,
+              "score": 50,
+              "trend": "rising",
+              "trend_change": 5.000000000000004,
+              "trend_bonus": -10,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "building_approvals": {
+              "value": 265000.0,
+              "score": 85,
+              "trend": "stable",
+              "trend_change": 1.9230769230769231,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Annual Building Approvals"
+            },
+            "auction_clearance_rate": {
+              "value": 48.0,
+              "score": 40,
+              "trend": "stable",
+              "trend_change": -4.0,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Auction Clearance %"
+            }
+          },
+          "data_completeness": 33.3,
+          "total_weight": 45,
+          "volatility_analysis": {
+            "rental_vacancy_rate": {
+              "penalty": 0,
+              "std_dev": 0.16,
+              "level": "low"
+            }
+          },
+          "total_volatility_penalty": 0,
+          "score_after_volatility": 40.0,
+          "score_after_cycle": 36.0,
+          "sub_scores": {
+            "affordability": 50,
+            "supply_demand": 65.2,
+            "financial_stress": 50,
+            "momentum": 43.3,
+            "trend_breakdown": {
+              "rising": 1,
+              "falling": 0,
+              "stable": 2
+            }
+          },
+          "regional_analysis": null,
+          "confidence_interval": {
+            "lower": 29.3,
+            "upper": 42.7,
+            "level": "Medium",
+            "range": 13.4
+          },
+          "final_score_v3": 36.0
+        }
+      },
+      "commentary": "**Current Market Assessment**\n\nMarket Score: **36/100** \u2014 \ud83d\udfe0 Caution (Medium Confidence)\nCycle Position: **Year 15.0 of 18.6** (Winner's Curse / Peak)\n\n**Bearish Factors:**\n- **Rental Vacancy Rate**: oversupply (4.20%, >3.5%)\n- **Auction Clearance Rate**: weak (48.00%)\n\n**Bullish Factors:**\n- **Building Approvals (Annual)**: above optimal (265,000)\n\n**Recommendation:** Elevated risks \u2014 prioritise cash reserves and avoid speculative purchases.\n\n_Auto-generated from latest indicator data on 2026-07-11._"
+    },
+    "sparse_like_production": {
+      "inputs": {
+        "indicators": [
+          {
+            "name": "household_debt_gdp",
+            "date": "2025-06-26",
+            "value": 112.0
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-04-02",
+            "value": 27.0
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-03-13",
+            "value": 4.1
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-05-27",
+            "value": 3.85
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-05-02",
+            "value": 66.0
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-06-06",
+            "value": 69.0
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-07-04",
+            "value": 73.0
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-02-21",
+            "value": 1.7
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-04-27",
+            "value": 1.8
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-06-21",
+            "value": 1.9
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-02-11",
+            "value": 168000
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-05-12",
+            "value": 171000
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-04-12",
+            "value": 4.3
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-06-11",
+            "value": 4.4
+          }
+        ],
+        "property_data": []
+      },
+      "v2": {
+        "score": 54.36,
+        "signal": "\ud83d\udfe1 Moderate Buy",
+        "breakdown": {
+          "base_score": 60.4,
+          "cycle_multiplier": 0.9,
+          "final_score": 54.4,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 3.85,
+              "score": 80,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "household_debt_gdp": {
+              "value": 112.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 25,
+              "description": "Debt to GDP Ratio"
+            },
+            "rental_vacancy_rate": {
+              "value": 1.9,
+              "score": 85,
+              "trend": "rising",
+              "trend_change": 5.555555555555548,
+              "trend_bonus": -10,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "building_approvals": {
+              "value": 171000.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Annual Building Approvals"
+            },
+            "mortgage_stress_rate": {
+              "value": 27.0,
+              "score": 50,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Mortgage Stress %"
+            },
+            "unemployment_rate": {
+              "value": 4.4,
+              "score": 75,
+              "trend": "stable",
+              "trend_change": 2.32558139534885,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Unemployment Rate"
+            },
+            "auction_clearance_rate": {
+              "value": 73.0,
+              "score": 65,
+              "trend": "rising",
+              "trend_change": 5.797101449275362,
+              "trend_bonus": 10,
+              "weight": 10,
+              "description": "Auction Clearance %"
+            }
+          },
+          "data_completeness": 77.8,
+          "total_weight": 125
+        }
+      },
+      "v3": {
+        "score": 54.36,
+        "signal": "\ud83d\udfe1 Moderate Buy",
+        "breakdown": {
+          "base_score": 60.4,
+          "cycle_multiplier": 0.9,
+          "final_score": 54.4,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 3.85,
+              "score": 80,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "household_debt_gdp": {
+              "value": 112.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 25,
+              "description": "Debt to GDP Ratio"
+            },
+            "rental_vacancy_rate": {
+              "value": 1.9,
+              "score": 85,
+              "trend": "rising",
+              "trend_change": 5.555555555555548,
+              "trend_bonus": -10,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "building_approvals": {
+              "value": 171000.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Annual Building Approvals"
+            },
+            "mortgage_stress_rate": {
+              "value": 27.0,
+              "score": 50,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Mortgage Stress %"
+            },
+            "unemployment_rate": {
+              "value": 4.4,
+              "score": 75,
+              "trend": "stable",
+              "trend_change": 2.32558139534885,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Unemployment Rate"
+            },
+            "auction_clearance_rate": {
+              "value": 73.0,
+              "score": 65,
+              "trend": "rising",
+              "trend_change": 5.797101449275362,
+              "trend_bonus": 10,
+              "weight": 10,
+              "description": "Auction Clearance %"
+            }
+          },
+          "data_completeness": 77.8,
+          "total_weight": 125,
+          "volatility_analysis": {
+            "interest_rate": {
+              "penalty": 0,
+              "std_dev": 0,
+              "level": "insufficient_data"
+            },
+            "household_debt_gdp": {
+              "penalty": 0,
+              "std_dev": 0,
+              "level": "insufficient_data"
+            },
+            "mortgage_stress_rate": {
+              "penalty": 0,
+              "std_dev": 0,
+              "level": "insufficient_data"
+            },
+            "rental_vacancy_rate": {
+              "penalty": 0,
+              "std_dev": 0.08,
+              "level": "low"
+            },
+            "unemployment_rate": {
+              "penalty": 0,
+              "std_dev": 0,
+              "level": "insufficient_data"
+            }
+          },
+          "total_volatility_penalty": 0,
+          "score_after_volatility": 60.4,
+          "score_after_cycle": 54.4,
+          "sub_scores": {
+            "affordability": 57.5,
+            "supply_demand": 52.5,
+            "financial_stress": 50.0,
+            "momentum": 50.0,
+            "trend_breakdown": {
+              "rising": 2,
+              "falling": 0,
+              "stable": 5
+            }
+          },
+          "regional_analysis": null,
+          "confidence_interval": {
+            "lower": 52.1,
+            "upper": 56.6,
+            "level": "High",
+            "range": 4.5
+          },
+          "final_score_v3": 54.4
+        }
+      },
+      "commentary": "**Current Market Assessment**\n\nMarket Score: **54/100** \u2014 \ud83d\udfe1 Moderate Buy\nCycle Position: **Year 15.0 of 18.6** (Winner's Curse / Peak)\n\n**Bearish Factors:**\n- **Household Debt to GDP**: above warning (112.00%, >110%)\n- **Building Approvals (Annual)**: deficit (171,000)\n\n**Bullish Factors:**\n- **Interest Rate (RBA Cash Rate)**: in optimal range (3.85%)\n- **Rental Vacancy Rate**: in optimal zone (1.90%)\n- **Unemployment Rate**: healthy (4.40%)\n- **Auction Clearance Rate**: healthy (73.00%)\n\n**Neutral / Watch:**\n- **Mortgage Stress Rate**: at 27.00%\n\n**Recommendation:** Balanced conditions \u2014 focus on quality over quantity and stress-test cash flow.\n\n_Auto-generated from latest indicator data on 2026-07-11._"
+    },
+    "with_regions": {
+      "inputs": {
+        "indicators": [
+          {
+            "name": "interest_rate",
+            "date": "2026-02-11",
+            "value": 4.35
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-04-12",
+            "value": 4.1
+          },
+          {
+            "name": "interest_rate",
+            "date": "2026-06-11",
+            "value": 3.85
+          },
+          {
+            "name": "household_debt_gdp",
+            "date": "2025-12-23",
+            "value": 112.0
+          },
+          {
+            "name": "household_debt_gdp",
+            "date": "2026-04-02",
+            "value": 111.0
+          },
+          {
+            "name": "household_debt_gdp",
+            "date": "2026-06-21",
+            "value": 109.5
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-03-13",
+            "value": 1.6
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-05-12",
+            "value": 1.7
+          },
+          {
+            "name": "rental_vacancy_rate",
+            "date": "2026-07-01",
+            "value": 1.8
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-02-01",
+            "value": 165000
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-04-22",
+            "value": 170000
+          },
+          {
+            "name": "building_approvals",
+            "date": "2026-06-26",
+            "value": 172000
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-02-21",
+            "value": 28.0
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-05-02",
+            "value": 27.5
+          },
+          {
+            "name": "mortgage_stress_rate",
+            "date": "2026-06-16",
+            "value": 26.0
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-03-03",
+            "value": 4.2
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-05-07",
+            "value": 4.3
+          },
+          {
+            "name": "unemployment_rate",
+            "date": "2026-06-29",
+            "value": 4.4
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-04-02",
+            "value": 68.0
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-05-22",
+            "value": 71.0
+          },
+          {
+            "name": "auction_clearance_rate",
+            "date": "2026-07-03",
+            "value": 74.0
+          },
+          {
+            "name": "credit_growth",
+            "date": "2026-03-23",
+            "value": 0.5
+          },
+          {
+            "name": "credit_growth",
+            "date": "2026-05-17",
+            "value": 0.6
+          },
+          {
+            "name": "credit_growth",
+            "date": "2026-06-23",
+            "value": 0.65
+          },
+          {
+            "name": "wage_growth",
+            "date": "2026-01-12",
+            "value": 3.4
+          },
+          {
+            "name": "wage_growth",
+            "date": "2026-04-12",
+            "value": 3.5
+          },
+          {
+            "name": "wage_growth",
+            "date": "2026-06-19",
+            "value": 3.6
+          }
+        ],
+        "property_data": [
+          {
+            "location": "Perth WA",
+            "metric": "median_price",
+            "date": "2026-06-11",
+            "value": 780000
+          },
+          {
+            "location": "Perth WA",
+            "metric": "rental_yield",
+            "date": "2026-06-11",
+            "value": 5.1
+          },
+          {
+            "location": "Perth WA",
+            "metric": "vacancy_rate",
+            "date": "2026-06-11",
+            "value": 1.4
+          },
+          {
+            "location": "Perth WA",
+            "metric": "annual_growth",
+            "date": "2026-06-11",
+            "value": 8.0
+          },
+          {
+            "location": "Sydney NSW",
+            "metric": "median_price",
+            "date": "2026-06-11",
+            "value": 1450000
+          },
+          {
+            "location": "Sydney NSW",
+            "metric": "rental_yield",
+            "date": "2026-06-11",
+            "value": 3.1
+          },
+          {
+            "location": "Sydney NSW",
+            "metric": "vacancy_rate",
+            "date": "2026-06-11",
+            "value": 2.4
+          },
+          {
+            "location": "Sydney NSW",
+            "metric": "annual_growth",
+            "date": "2026-06-11",
+            "value": 2.0
+          },
+          {
+            "location": "Albany WA",
+            "metric": "median_price",
+            "date": "2026-06-11",
+            "value": 560000
+          },
+          {
+            "location": "Albany WA",
+            "metric": "rental_yield",
+            "date": "2026-06-11",
+            "value": 4.8
+          },
+          {
+            "location": "Albany WA",
+            "metric": "vacancy_rate",
+            "date": "2026-06-11",
+            "value": 1.1
+          },
+          {
+            "location": "Albany WA",
+            "metric": "annual_growth",
+            "date": "2026-06-11",
+            "value": 6.0
+          }
+        ]
+      },
+      "v2": {
+        "score": 58.5,
+        "signal": "\ud83d\udfe1 Moderate Buy",
+        "breakdown": {
+          "base_score": 65.0,
+          "cycle_multiplier": 0.9,
+          "final_score": 58.5,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 3.85,
+              "score": 80,
+              "trend": "falling",
+              "trend_change": -6.0975609756097455,
+              "trend_bonus": 10,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "household_debt_gdp": {
+              "value": 109.5,
+              "score": 50,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 25,
+              "description": "Debt to GDP Ratio"
+            },
+            "rental_vacancy_rate": {
+              "value": 1.8,
+              "score": 85,
+              "trend": "rising",
+              "trend_change": 5.882352941176476,
+              "trend_bonus": -10,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "building_approvals": {
+              "value": 172000.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 1.1764705882352942,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Annual Building Approvals"
+            },
+            "mortgage_stress_rate": {
+              "value": 26.0,
+              "score": 50,
+              "trend": "falling",
+              "trend_change": -5.454545454545454,
+              "trend_bonus": 10,
+              "weight": 15,
+              "description": "Mortgage Stress %"
+            },
+            "unemployment_rate": {
+              "value": 4.4,
+              "score": 75,
+              "trend": "stable",
+              "trend_change": 2.32558139534885,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Unemployment Rate"
+            },
+            "auction_clearance_rate": {
+              "value": 74.0,
+              "score": 65,
+              "trend": "stable",
+              "trend_change": 4.225352112676056,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Auction Clearance %"
+            },
+            "credit_growth": {
+              "value": 0.65,
+              "score": 50,
+              "trend": "n/a",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 5,
+              "description": "Monthly Credit Growth %"
+            },
+            "wage_growth": {
+              "value": 3.6,
+              "score": 50,
+              "trend": "n/a",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 5,
+              "description": "Annual Wage Growth %"
+            }
+          },
+          "data_completeness": 100.0,
+          "total_weight": 135
+        }
+      },
+      "v3": {
+        "score": 58.5,
+        "signal": "\ud83d\udfe1 Moderate Buy",
+        "breakdown": {
+          "base_score": 65.0,
+          "cycle_multiplier": 0.9,
+          "final_score": 58.5,
+          "cycle_position": 18.0,
+          "cycle_warning": "\u26a0\ufe0f Late Cycle (Year 18/18.6) - Exercise Caution",
+          "risk_warnings": [],
+          "indicator_scores": {
+            "interest_rate": {
+              "value": 3.85,
+              "score": 80,
+              "trend": "falling",
+              "trend_change": -6.0975609756097455,
+              "trend_bonus": 10,
+              "weight": 30,
+              "description": "RBA Cash Rate"
+            },
+            "household_debt_gdp": {
+              "value": 109.5,
+              "score": 50,
+              "trend": "stable",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 25,
+              "description": "Debt to GDP Ratio"
+            },
+            "rental_vacancy_rate": {
+              "value": 1.8,
+              "score": 85,
+              "trend": "rising",
+              "trend_change": 5.882352941176476,
+              "trend_bonus": -10,
+              "weight": 20,
+              "description": "Rental Vacancy"
+            },
+            "building_approvals": {
+              "value": 172000.0,
+              "score": 35,
+              "trend": "stable",
+              "trend_change": 1.1764705882352942,
+              "trend_bonus": 0,
+              "weight": 15,
+              "description": "Annual Building Approvals"
+            },
+            "mortgage_stress_rate": {
+              "value": 26.0,
+              "score": 50,
+              "trend": "falling",
+              "trend_change": -5.454545454545454,
+              "trend_bonus": 10,
+              "weight": 15,
+              "description": "Mortgage Stress %"
+            },
+            "unemployment_rate": {
+              "value": 4.4,
+              "score": 75,
+              "trend": "stable",
+              "trend_change": 2.32558139534885,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Unemployment Rate"
+            },
+            "auction_clearance_rate": {
+              "value": 74.0,
+              "score": 65,
+              "trend": "stable",
+              "trend_change": 4.225352112676056,
+              "trend_bonus": 0,
+              "weight": 10,
+              "description": "Auction Clearance %"
+            },
+            "credit_growth": {
+              "value": 0.65,
+              "score": 50,
+              "trend": "n/a",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 5,
+              "description": "Monthly Credit Growth %"
+            },
+            "wage_growth": {
+              "value": 3.6,
+              "score": 50,
+              "trend": "n/a",
+              "trend_change": 0,
+              "trend_bonus": 0,
+              "weight": 5,
+              "description": "Annual Wage Growth %"
+            }
+          },
+          "data_completeness": 100.0,
+          "total_weight": 135,
+          "volatility_analysis": {
+            "interest_rate": {
+              "penalty": 0,
+              "std_dev": 0.2,
+              "level": "low"
+            },
+            "household_debt_gdp": {
+              "penalty": 0,
+              "std_dev": 0,
+              "level": "insufficient_data"
+            },
+            "mortgage_stress_rate": {
+              "penalty": 0,
+              "std_dev": 0.85,
+              "level": "low"
+            },
+            "rental_vacancy_rate": {
+              "penalty": 0,
+              "std_dev": 0.08,
+              "level": "low"
+            },
+            "unemployment_rate": {
+              "penalty": 0,
+              "std_dev": 0.08,
+              "level": "low"
+            }
+          },
+          "total_volatility_penalty": 0,
+          "score_after_volatility": 65.0,
+          "score_after_cycle": 58.5,
+          "sub_scores": {
+            "affordability": 62.0,
+            "supply_demand": 52.5,
+            "financial_stress": 60.0,
+            "momentum": 52.9,
+            "trend_breakdown": {
+              "rising": 1,
+              "falling": 2,
+              "stable": 4
+            }
+          },
+          "regional_analysis": {
+            "locations": {
+              "Albany WA": {
+                "score": 100,
+                "data": {
+                  "median_price": 560000.0,
+                  "rental_yield": 4.8,
+                  "vacancy_rate": 1.1,
+                  "annual_growth": 6.0
+                }
+              },
+              "Perth WA": {
+                "score": 100,
+                "data": {
+                  "median_price": 780000.0,
+                  "rental_yield": 5.1,
+                  "vacancy_rate": 1.4,
+                  "annual_growth": 8.0
+                }
+              },
+              "Sydney NSW": {
+                "score": 50,
+                "data": {
+                  "median_price": 1450000.0,
+                  "rental_yield": 3.1,
+                  "vacancy_rate": 2.4,
+                  "annual_growth": 2.0
+                }
+              }
+            },
+            "divergence": 50,
+            "ranked": [
+              [
+                "Albany WA",
+                {
+                  "score": 100,
+                  "data": {
+                    "median_price": 560000.0,
+                    "rental_yield": 4.8,
+                    "vacancy_rate": 1.1,
+                    "annual_growth": 6.0
+                  }
+                }
+              ],
+              [
+                "Perth WA",
+                {
+                  "score": 100,
+                  "data": {
+                    "median_price": 780000.0,
+                    "rental_yield": 5.1,
+                    "vacancy_rate": 1.4,
+                    "annual_growth": 8.0
+                  }
+                }
+              ],
+              [
+                "Sydney NSW",
+                {
+                  "score": 50,
+                  "data": {
+                    "median_price": 1450000.0,
+                    "rental_yield": 3.1,
+                    "vacancy_rate": 2.4,
+                    "annual_growth": 2.0
+                  }
+                }
+              ]
+            ],
+            "recommendation": "selective"
+          },
+          "confidence_interval": {
+            "lower": 58.5,
+            "upper": 58.5,
+            "level": "High",
+            "range": 0.0
+          },
+          "final_score_v3": 58.5
+        }
+      },
+      "commentary": "**Current Market Assessment**\n\nMarket Score: **58/100** \u2014 \ud83d\udfe1 Moderate Buy\nCycle Position: **Year 15.0 of 18.6** (Winner's Curse / Peak)\n\n**Bearish Factors:**\n- **Building Approvals (Annual)**: deficit (172,000)\n\n**Bullish Factors:**\n- **Interest Rate (RBA Cash Rate)**: in optimal range (3.85%)\n- **Rental Vacancy Rate**: in optimal zone (1.80%)\n- **Unemployment Rate**: healthy (4.40%)\n- **Auction Clearance Rate**: healthy (74.00%)\n- **Credit Growth (Monthly)**: healthy (0.65%)\n- **Wage Growth (Annual)**: healthy (3.60%)\n\n**Neutral / Watch:**\n- **Household Debt to GDP**: at 109.50%\n- **Mortgage Stress Rate**: at 26.00%\n\n**Recommendation:** Balanced conditions \u2014 focus on quality over quantity and stress-test cash flow.\n\n_Auto-generated from latest indicator data on 2026-07-11._"
+    },
+    "empty": {
+      "inputs": {
+        "indicators": [],
+        "property_data": []
+      },
+      "v2": {
+        "score": 50,
+        "signal": "Insufficient Data",
+        "breakdown": {
+          "error": "No data available"
+        }
+      },
+      "v3": {
+        "score": 50.0,
+        "signal": "\ud83d\udfe1 Moderate Buy (Medium Confidence)",
+        "breakdown": {
+          "error": "No data available",
+          "volatility_analysis": {},
+          "total_volatility_penalty": 0,
+          "score_after_volatility": 50,
+          "score_after_cycle": 50.0,
+          "sub_scores": {
+            "affordability": 50,
+            "supply_demand": 50,
+            "financial_stress": 50,
+            "momentum": 50,
+            "trend_breakdown": {
+              "rising": 0,
+              "falling": 0,
+              "stable": 0
+            }
+          },
+          "regional_analysis": null,
+          "confidence_interval": {
+            "lower": 45.0,
+            "upper": 55.0,
+            "level": "Medium",
+            "range": 10.0
+          },
+          "final_score_v3": 50.0
+        }
+      },
+      "commentary": "**Current Market Assessment**\n\nMarket Score: **50/100** \u2014 \ud83d\udfe1 Moderate Buy (Medium Confidence)\nCycle Position: **Year 15.0 of 18.6** (Winner's Curse / Peak)\n\n**Recommendation:** Balanced conditions \u2014 focus on quality over quantity and stress-test cash flow.\n\n_Auto-generated from latest indicator data on 2026-07-11._"
+    }
+  }
+}
