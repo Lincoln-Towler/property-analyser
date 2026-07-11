@@ -113,13 +113,15 @@ If you decide you want a *live* site with an in-browser admin form (instant scor
 
 **Total: ~15–25 hours across 2–3 weekends. Running cost: $0/month.**
 
-## Decisions needed from Lincoln
+## Decisions — RESOLVED June 2026
 
-1. **Cycle anchor: 2011 (recommended) or 2008?** Changes the headline score's multiplier on day one.
-2. **Fix the unreachable danger/crisis branches?** Recommended, as reviewed commits after parity.
-3. **`property_data` / Location Analysis**: revive the feed or archive the table?
-4. **Static-nightly freshness OK?** If instant-after-edit matters, switch the pick to Next.js before starting.
-5. **BTC system**: leave in place behind deny-all RLS (v1) or split to its own schema/project later? (Free tier allows only 2 projects — the Lardr project already occupies the second slot.)
+1. **Cycle anchor: 2008** (Lincoln's call). Score multiplier unchanged (×0.90); the Anderson tracker moves from Year 15/Winner's Curse to **Year 18/Crash phase**.
+2. **Unreachable danger/crisis branches**: kept bug-for-bug in the v1 port to preserve exact score parity. Fixing them is a flagged follow-up (changes household_debt at 125 from 35 → 15 points).
+3. **`property_data`**: kept as-is, Location Analysis deferred until the feed is revived.
+4. **Freshness: live site → Next.js chosen** (the product-lens judge's pick). ISR-cached RSC pages, hourly revalidate, daily score snapshot via Vercel Cron.
+5. **BTC system**: left in place behind deny-all RLS (v1); schema/project split deferred. (Free tier allows only 2 projects — Lardr occupies the second slot.)
+
+**Build status**: see [[Changelog]] — scoring engine ported with 24/24 golden-master parity tests, 4 public pages built, migrations written. Remaining: apply migrations, deploy to Vercel, admin section, parallel run, cutover.
 
 ## Related Notes
 
