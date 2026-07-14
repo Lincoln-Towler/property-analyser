@@ -11,6 +11,7 @@ const NAV = [
   { href: '/', label: 'Dashboard' },
   { href: '/indicators', label: 'Indicators' },
   { href: '/cycle', label: 'Cycle' },
+  { href: '/btc', label: 'BTC' },
   { href: '/audit', label: 'Data Audit' },
 ];
 
