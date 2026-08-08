@@ -532,6 +532,80 @@ function roundHalfEven2(x: number): number {
 }
 
 // ---------------------------------------------------------------------------
+// Window context — DISPLAY ONLY. Never feeds trend_bonus or any score.
+//
+// getIndicatorTrend compares only the two most recent points, which is
+// faithful to the Python original but blind on densely-sampled series: with
+// weekly auction clearance running 54.7 -> 45.3 (a monotone -17% slide over
+// six readings), the last two are 47.2 -> 45.3 = -4%, under the 5% gate, so
+// the engine reports "stable". That is the number the user reads. Rather
+// than change the scoring rule (which would break parity), report the honest
+// shape of the window alongside it.
+
+export interface WindowContext {
+  pointsInWindow: number;
+  spanDays: number;
+  firstValue: number;
+  lastValue: number;
+  changePct: number;
+  /** consecutive step direction agreement, e.g. 5 of 5 declines */
+  monotoneSteps: number;
+  totalSteps: number;
+  direction: 'rising' | 'falling' | 'mixed';
+}
+
+export function getWindowContext(
+  points: DataPoint[] | undefined,
+  now: Date,
+  months = 3,
+): WindowContext | null {
+  const cutoff = monthsAgoISO(now, months);
+  const window = [...(points ?? [])]
+    .filter((p) => p.date >= cutoff)
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  if (window.length < 3) return null; // 2 points add nothing over the trend
+
+  const first = window[0];
+  const last = window[window.length - 1];
+  const changePct = first.value === 0 ? 0 : ((last.value - first.value) / first.value) * 100;
+
+  let up = 0;
+  let down = 0;
+  for (let i = 1; i < window.length; i++) {
+    const delta = window[i].value - window[i - 1].value;
+    if (delta > 0) up++;
+    else if (delta < 0) down++;
+  }
+  const totalSteps = window.length - 1;
+  const monotoneSteps = Math.max(up, down);
+  const direction = up === monotoneSteps && up > down ? 'rising' : down > up ? 'falling' : 'mixed';
+
+  const spanDays = Math.round(
+    (new Date(last.date + 'T00:00:00Z').getTime() - new Date(first.date + 'T00:00:00Z').getTime()) /
+      86400000,
+  );
+
+  return {
+    pointsInWindow: window.length,
+    spanDays,
+    firstValue: first.value,
+    lastValue: last.value,
+    changePct,
+    monotoneSteps,
+    totalSteps,
+    direction,
+  };
+}
+
+/** True when the window tells a materially different story than the
+ *  two-point trend the engine scored — i.e. worth surfacing to the user. */
+export function windowContradictsTrend(ctx: WindowContext | null, trend: string): boolean {
+  if (!ctx) return false;
+  if (Math.abs(ctx.changePct) < 5) return false;
+  return trend === 'stable' || (ctx.direction !== 'mixed' && ctx.direction !== trend);
+}
+
+// ---------------------------------------------------------------------------
 // Audit — new capability (not in the Python app): per-indicator freshness so
 // stale single-point indicators are visible instead of silently anchoring
 // the score.

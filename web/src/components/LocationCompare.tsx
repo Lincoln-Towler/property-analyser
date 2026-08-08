@@ -18,6 +18,7 @@ import {
 import {
   METRIC_LABELS,
   METRIC_HIGHER_IS_BETTER,
+  isComparableMetric,
   formatMetric,
   type ScoredLocation,
 } from '@/lib/scoring/location';
@@ -145,14 +146,33 @@ export function LocationCompare({
             {COMPARE_METRICS.map((metric) => {
               const va = a.metrics[metric]?.value;
               const vb = b.metrics[metric]?.value;
+              // Only declare a winner for metrics with a defined direction.
+              // sales_volume has none — its readings mix geographic scope and
+              // period, so highlighting the larger number is meaningless.
               let winner: 'a' | 'b' | null = null;
-              if (va !== undefined && vb !== undefined && va !== vb && !sameLocation) {
+              if (
+                isComparableMetric(metric) &&
+                va !== undefined &&
+                vb !== undefined &&
+                va !== vb &&
+                !sameLocation
+              ) {
                 const higherBetter = METRIC_HIGHER_IS_BETTER[metric];
                 winner = (higherBetter ? va > vb : va < vb) ? 'a' : 'b';
               }
               return (
                 <tr key={metric}>
-                  <td className="px-4 py-3 text-slate-300">{METRIC_LABELS[metric] ?? metric}</td>
+                  <td className="px-4 py-3 text-slate-300">
+                    {METRIC_LABELS[metric] ?? metric}
+                    {!isComparableMetric(metric) && (
+                      <span
+                        className="ml-2 text-xs text-slate-500"
+                        title="Readings mix geographic scope and reporting period across locations, so they are not comparable."
+                      >
+                        not comparable
+                      </span>
+                    )}
+                  </td>
                   <td
                     className={`px-4 py-3 tabular-nums ${
                       winner === 'a' ? 'font-semibold text-emerald-400' : ''

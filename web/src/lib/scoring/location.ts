@@ -125,12 +125,19 @@ export function formatMetric(metric: string, value: number | undefined): string 
   }
 }
 
-/** Higher is better? Used to colour the better value in a head-to-head. */
+/** Higher is better? Used to colour the better value in a head-to-head.
+ *  A metric absent from this map is NOT comparable across locations and
+ *  must never get a winner highlight — sales_volume is the case in point:
+ *  the readings mix geographic scope and period (Wodonga 446 and Sale 379
+ *  against Sydney 13 and Tamworth 4), so "higher" is meaningless. */
 export const METRIC_HIGHER_IS_BETTER: Record<string, boolean> = {
   median_price: false, // cheaper entry is "better" for a buyer
   annual_growth: true,
   rental_yield: true,
   vacancy_rate: false,
   days_on_market: false,
-  sales_volume: true,
 };
+
+export function isComparableMetric(metric: string): boolean {
+  return metric in METRIC_HIGHER_IS_BETTER;
+}
