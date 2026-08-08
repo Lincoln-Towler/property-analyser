@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import { calculateMarketScoreV3, buildAudit } from '@/lib/scoring/engine';
 import type { SeriesMap, PropertyPoint } from '@/lib/scoring/engine';
 import { generateAutoCommentary } from '@/lib/scoring/commentary';
+import { prepareSeries } from '@/lib/transforms';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,14 +40,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: indicators.error.message }, { status: 500 });
   }
 
-  const series: SeriesMap = {};
+  const rawSeries: SeriesMap = {};
   for (const row of indicators.data ?? []) {
-    (series[row.indicator_name] ??= []).push({
+    (rawSeries[row.indicator_name] ??= []).push({
       date: row.date,
       value: Number(row.value),
       source: row.source,
     });
   }
+  const { series, adjustments } = prepareSeries(rawSeries);
   const propertyData: PropertyPoint[] = (property.data ?? []).map((r) => ({
     date: r.date,
     location: r.location,
@@ -67,7 +69,7 @@ export async function GET(request: NextRequest) {
       sub_scores: v3.breakdown.sub_scores,
       breakdown: v3.breakdown,
       confidence: v3.breakdown.confidence_interval,
-      audit,
+      audit: { indicators: audit, adjustments },
       commentary_md: commentary,
       computed_at: now.toISOString(),
     },

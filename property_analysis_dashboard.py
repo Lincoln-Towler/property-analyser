@@ -178,7 +178,18 @@ def economic_indicators_view(conn):
 
     try:
         if is_postgres(conn):
-            _create_combined_view_pg(conn)
+            # The view is now owned by supabase/migrations (0002, SECURITY
+            # INVOKER). Recreating it here would clobber that definition —
+            # only create if it doesn't exist yet (e.g. fresh local DB).
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.views
+                    WHERE table_name = 'economic_indicators_combined'
+                )
+            """)
+            if not cursor.fetchone()[0]:
+                _create_combined_view_pg(conn)
         else:
             _create_combined_view_sqlite(conn)
         _ei_view_cache = {'name': 'economic_indicators_combined', 'has_history': True}

@@ -70,6 +70,33 @@ export default async function AuditPage() {
         </table>
       </div>
 
+      {(data.adjustments.dropped.length > 0 || data.adjustments.annualized.length > 0) && (
+        <section className="rounded-xl border border-amber-700/60 bg-amber-950/30 p-5 text-sm text-slate-200">
+          <h2 className="mb-2 font-medium">Data adjustments applied</h2>
+          {data.adjustments.dropped.length > 0 && (
+            <div className="mb-2">
+              <p className="mb-1">
+                Implausible values excluded from charts and scoring (likely a broken feed —
+                check the n8n workflow):
+              </p>
+              <ul className="list-disc pl-5 text-slate-300">
+                {data.adjustments.dropped.map((d) => (
+                  <li key={`${d.indicator}-${d.date}`}>
+                    {d.indicator}: {d.value} on {d.date}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {data.adjustments.annualized.map((name) => (
+            <p key={name}>
+              <strong>{name}</strong>: feed delivers monthly readings — values shown and scored
+              as a trailing 12-month annualised rate to match the annual thresholds.
+            </p>
+          ))}
+        </section>
+      )}
+
       <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 text-sm text-slate-300">
         <h2 className="mb-2 font-medium">Score snapshots</h2>
         <p>

@@ -6,6 +6,7 @@ import 'server-only';
 import { cache } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import type { SeriesMap, PropertyPoint } from './scoring/engine';
+import { prepareSeries, type SeriesAdjustments } from './transforms';
 
 export interface ScoreHistoryRow {
   score_date: string;
@@ -17,6 +18,7 @@ export interface SiteData {
   series: SeriesMap;
   propertyData: PropertyPoint[];
   scoreHistory: ScoreHistoryRow[];
+  adjustments: SeriesAdjustments;
   fetchedAt: string;
 }
 
@@ -54,14 +56,17 @@ export const getSiteData = cache(async (): Promise<SiteData | null> => {
 
   if (indicators.error) throw new Error(`indicators query failed: ${indicators.error.message}`);
   // property_data / score history are optional — tolerate missing tables
-  const series: SeriesMap = {};
+  const rawSeries: SeriesMap = {};
   for (const row of indicators.data ?? []) {
-    (series[row.indicator_name] ??= []).push({
+    (rawSeries[row.indicator_name] ??= []).push({
       date: row.date,
       value: Number(row.value),
       source: row.source,
     });
   }
+  // Drop implausible values and annualise monthly building approvals before
+  // anything downstream (engine, charts) sees the data.
+  const { series, adjustments } = prepareSeries(rawSeries);
 
   const propertyData: PropertyPoint[] = (property.data ?? []).map((row) => ({
     date: row.date,
@@ -74,5 +79,5 @@ export const getSiteData = cache(async (): Promise<SiteData | null> => {
     .map((r) => ({ ...r, final_score: Number(r.final_score) }))
     .reverse();
 
-  return { series, propertyData, scoreHistory, fetchedAt: new Date().toISOString() };
+  return { series, propertyData, scoreHistory, adjustments, fetchedAt: new Date().toISOString() };
 });
