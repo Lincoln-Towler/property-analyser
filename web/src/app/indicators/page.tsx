@@ -47,6 +47,7 @@ export default async function IndicatorsPage() {
           const status = cfg ? indicatorStatus(latest?.value ?? null, cfg) : 'warning';
           const target = cfg ? indicatorTargetText(cfg) : null;
           const unit = cfg?.unit ?? '';
+          const isAnnualized = data.adjustments.annualized.includes(key);
 
           return (
             <section key={key} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
@@ -69,6 +70,11 @@ export default async function IndicatorsPage() {
                       'No data yet'
                     )}
                   </p>
+                  {isAnnualized && (
+                    <p className="text-xs text-sky-400/80">
+                      annualised from monthly readings (trailing 12-month rate)
+                    </p>
+                  )}
                 </div>
                 {cfg && <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${STATUS_DOT[status]}`} />}
               </header>
