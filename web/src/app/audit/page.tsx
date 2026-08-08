@@ -13,6 +13,10 @@ export default async function AuditPage() {
   const audit = buildAudit(data.series, new Date());
   const propertyAudit = auditPropertyData(data.propertyData);
 
+  // Scored weight that cannot move: stale, or unable to trend at all.
+  const frozen = audit.filter((a) => a.weight > 0 && (a.stale || !a.can_trend));
+  const frozenWeightPct = frozen.reduce((sum, a) => sum + a.weight_pct, 0);
+
   return (
     <div className="space-y-6">
       <header>
@@ -25,6 +29,32 @@ export default async function AuditPage() {
           labelled <em>manual</em> come from the current table.
         </p>
       </header>
+
+      {frozen.length > 0 && (
+        <section className="rounded-xl border border-amber-700/60 bg-amber-950/30 p-5 text-sm">
+          <h2 className="mb-1 font-medium">
+            {frozenWeightPct.toFixed(0)}% of the score is riding on data that can&apos;t move
+          </h2>
+          <p className="mb-3 text-xs text-slate-400">
+            These indicators still carry their full weight, but are stale or have too few recent
+            readings to produce a trend — so they hold the score in place rather than informing
+            it. Nothing is excluded from scoring; the fix is more data, not different maths.
+          </p>
+          <ul className="space-y-1 text-slate-300">
+            {frozen.map((a) => (
+              <li key={a.indicator}>
+                <span className="font-medium">{a.display_name}</span> — carries{' '}
+                <span className="tabular-nums">{a.weight}</span>/135 (
+                {a.weight_pct.toFixed(1)}% of the score),{' '}
+                {a.days_old === null ? 'no data' : `${a.days_old} days old`},{' '}
+                {a.point_count} {a.point_count === 1 ? 'reading' : 'readings'}
+                {!a.can_trend && ', cannot trend'}
+                {!a.can_measure_volatility && ', volatility unmeasurable'}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-800">
         <table className="w-full min-w-[640px] text-sm">

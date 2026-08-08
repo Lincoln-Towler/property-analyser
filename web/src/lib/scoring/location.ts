@@ -1,10 +1,25 @@
 // Per-location investment scoring, ported from calculate_location_score()
 // in property_analysis_dashboard.py (inside show_location_analysis).
 //
-// PARITY NOTE: the Python guards read `if growth and growth > 10`, so a
-// value of exactly 0 is falsy and skips its whole branch. That is preserved
-// here — most visibly for vacancy_rate, where a 0.00 reading (which in this
-// dataset means "no data", not "zero vacancy") earns no bonus at all.
+// DELIBERATE DIVERGENCE FROM THE PYTHON (Aug 2026):
+// The Python guards read `if growth and growth > 10`, so a value of exactly
+// 0 is falsy and skips its whole branch. That idiom was meant as a
+// None-check, not a decision about zero — and it made this function
+// disagree with calculateRegionalDivergence (engine.ts:401-403), which uses
+// explicit `in` checks and so treats 0 as a real reading. Two scoring paths
+// returned different answers for identical input.
+//
+// Resolved in favour of the explicit check: 0 is a value, not an absence.
+// An audit of the live data found 0.00 vacancy rates for Albany and
+// Tamworth — markets reporting 22 and 4 sales, where a genuinely empty
+// rental sample is credible, so treating it as "missing" was the weaker
+// reading. Missing metrics are still skipped, because they are absent from
+// the map entirely rather than present as 0.
+//
+// No score changes today: both locations' latest vacancy readings are
+// non-zero (0.5 and 0.80), and latestMetrics only ever reads the newest.
+// calculateRegionalDivergence is untouched, so the golden-master parity
+// suite is unaffected.
 
 import type { PropertyPoint } from './engine';
 
@@ -40,32 +55,32 @@ export function latestMetrics(rows: PropertyPoint[], location: string): Location
   return out;
 }
 
-/** Python truthiness: null/undefined/0 all skip the branch. */
-function truthy(v: number | undefined): v is number {
-  return v !== undefined && v !== 0 && !Number.isNaN(v);
+/** Present and numeric. A reading of 0 counts; only absence is skipped. */
+function present(v: number | undefined): v is number {
+  return v !== undefined && !Number.isNaN(v);
 }
 
 export function locationScore(metrics: LocationMetrics): number {
   let score = 50;
 
   const growth = metrics.annual_growth?.value;
-  if (truthy(growth) && growth > 10) score += 15;
-  else if (truthy(growth) && growth > 5) score += 10;
-  else if (truthy(growth) && growth > 0) score += 5;
-  else if (truthy(growth) && growth < 0) score -= 10;
+  if (present(growth) && growth > 10) score += 15;
+  else if (present(growth) && growth > 5) score += 10;
+  else if (present(growth) && growth > 0) score += 5;
+  else if (present(growth) && growth < 0) score -= 10;
 
   const rentalYield = metrics.rental_yield?.value;
-  if (truthy(rentalYield) && rentalYield > 4) score += 10;
-  else if (truthy(rentalYield) && rentalYield > 3) score += 5;
+  if (present(rentalYield) && rentalYield > 4) score += 10;
+  else if (present(rentalYield) && rentalYield > 3) score += 5;
 
   const vacancy = metrics.vacancy_rate?.value;
-  if (truthy(vacancy) && vacancy < 1) score += 15;
-  else if (truthy(vacancy) && vacancy < 2) score += 10;
-  else if (truthy(vacancy) && vacancy > 3) score -= 10;
+  if (present(vacancy) && vacancy < 1) score += 15;
+  else if (present(vacancy) && vacancy < 2) score += 10;
+  else if (present(vacancy) && vacancy > 3) score -= 10;
 
   const daysOnMarket = metrics.days_on_market?.value;
-  if (truthy(daysOnMarket) && daysOnMarket < 30) score += 10;
-  else if (truthy(daysOnMarket) && daysOnMarket > 60) score -= 5;
+  if (present(daysOnMarket) && daysOnMarket < 30) score += 10;
+  else if (present(daysOnMarket) && daysOnMarket > 60) score -= 5;
 
   return Math.max(0, Math.min(100, score));
 }

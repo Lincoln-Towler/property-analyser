@@ -3,6 +3,7 @@ import {
   getWindowContext,
   windowContradictsTrend,
   getIndicatorTrend,
+  buildAudit,
 } from '../src/lib/scoring/engine';
 
 // The real auction_clearance_rate series as of Aug 2026 — the case that
@@ -60,5 +61,29 @@ describe('getWindowContext', () => {
     const before = getIndicatorTrend(CLEARANCE, NOW, 3);
     getWindowContext(CLEARANCE, NOW, 3);
     expect(getIndicatorTrend(CLEARANCE, NOW, 3)).toEqual(before);
+  });
+});
+
+describe('buildAudit weight-at-risk', () => {
+  it('reports the weight carried by a frozen single-point indicator', () => {
+    const audit = buildAudit(
+      {
+        household_debt_gdp: [{ date: '2025-06-30', value: 113.7 }],
+        auction_clearance_rate: CLEARANCE,
+      },
+      NOW,
+    );
+    const debt = audit.find((a) => a.indicator === 'household_debt_gdp')!;
+    expect(debt.weight).toBe(25);
+    expect(debt.weight_pct).toBeCloseTo((25 / 135) * 100, 5); // 18.5%
+    expect(debt.can_trend).toBe(false);
+    expect(debt.can_measure_volatility).toBe(false);
+    expect(debt.stale).toBe(true);
+
+    // a densely sampled series is not frozen
+    const clearance = audit.find((a) => a.indicator === 'auction_clearance_rate')!;
+    expect(clearance.can_trend).toBe(true);
+    expect(clearance.can_measure_volatility).toBe(true);
+    expect(clearance.stale).toBe(false);
   });
 });

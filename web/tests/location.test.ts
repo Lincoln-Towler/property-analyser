@@ -40,11 +40,18 @@ describe('locationScore', () => {
     expect(locationScore(m(-40, 1, 9, 200))).toBe(25);
   });
 
-  it('treats a 0.00 vacancy reading as no-data (Python truthiness parity)', () => {
-    // vacancy 0 is falsy in the original Python, so it earns NO bonus —
-    // matching bug-for-bug. Contrast with 0.5, which earns +15.
-    expect(locationScore(m(9.57, 3.69, 0, 56))).toBe(65);
+  it('treats a 0.00 vacancy reading as a real value, like the divergence path', () => {
+    // Deliberate divergence from the Python, whose `if vacancy and ...`
+    // idiom accidentally skipped zero. 0 and 0.5 are both under 1, so both
+    // earn +15 — and this now matches calculateRegionalDivergence, which
+    // has always used an explicit presence check.
+    expect(locationScore(m(9.57, 3.69, 0, 56))).toBe(80);
     expect(locationScore(m(9.57, 3.69, 0.5, 56))).toBe(80);
+  });
+
+  it('still skips a metric that is absent rather than zero', () => {
+    // no vacancy_rate key at all -> no bonus, no penalty
+    expect(locationScore(m(9.57, 3.69, undefined, 56))).toBe(65);
   });
 
   it('returns the neutral base when no metrics are present', () => {

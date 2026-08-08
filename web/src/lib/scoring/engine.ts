@@ -619,6 +619,14 @@ export interface IndicatorAudit {
   stale: boolean;
   point_count: number;
   sources: Record<string, number>;
+  /** 0 for unscored indicators */
+  weight: number;
+  /** this indicator's share of the total weight, as a percentage */
+  weight_pct: number;
+  /** enough points in the 3-month window for the trend rule to fire */
+  can_trend: boolean;
+  /** enough points in the 6-month window for volatility to be measurable */
+  can_measure_volatility: boolean;
 }
 
 export function buildAudit(series: SeriesMap, now: Date): IndicatorAudit[] {
@@ -635,15 +643,28 @@ export function buildAudit(series: SeriesMap, now: Date): IndicatorAudit[] {
       const s = p.source ?? 'unknown';
       sources[s] = (sources[s] ?? 0) + 1;
     }
+    // Weight at risk: a stale or single-point indicator still carries its
+    // full weight, but can never trend or register volatility. Surfacing
+    // that is the honest alternative to silently dropping it from the score.
+    const cfg = INDICATORS_CONFIG[name];
+    const weight = cfg?.weight ?? 0;
+    const totalWeight = Object.values(INDICATORS_CONFIG).reduce((a, c) => a + c.weight, 0);
+    const trendCutoff = monthsAgoISO(now, 3);
+    const volCutoff = monthsAgoISO(now, 6);
+
     result.push({
       indicator: name,
-      display_name: INDICATORS_CONFIG[name]?.display_name ?? name.replace(/_/g, ' '),
+      display_name: cfg?.display_name ?? name.replace(/_/g, ' '),
       latest_date: latest?.date ?? null,
       latest_value: latest?.value ?? null,
       days_old: daysOld,
       stale: daysOld === null || daysOld > STALE_AFTER_DAYS,
       point_count: points.length,
       sources,
+      weight,
+      weight_pct: totalWeight ? (weight / totalWeight) * 100 : 0,
+      can_trend: points.filter((p) => p.date >= trendCutoff).length >= 2,
+      can_measure_volatility: points.filter((p) => p.date >= volCutoff).length >= 3,
     });
   }
   return result.sort((a, b) => (INDICATORS_CONFIG[b.indicator]?.weight ?? 0) - (INDICATORS_CONFIG[a.indicator]?.weight ?? 0));
