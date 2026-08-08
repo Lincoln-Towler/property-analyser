@@ -50,6 +50,14 @@ export default async function AuditPage() {
                 {a.point_count} {a.point_count === 1 ? 'reading' : 'readings'}
                 {!a.can_trend && ', cannot trend'}
                 {!a.can_measure_volatility && ', volatility unmeasurable'}
+                {a.cadence_blocks_trend && (
+                  <span className="text-amber-300">
+                    {' '}
+                    — {a.expected_frequency} data can never fill a 3-month trend window
+                    {a.cadence_blocks_volatility ? ' or a 6-month volatility window' : ''}, so
+                    backfilling will not change this
+                  </span>
+                )}
               </li>
             ))}
           </ul>

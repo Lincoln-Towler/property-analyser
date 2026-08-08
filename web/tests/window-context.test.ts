@@ -87,3 +87,32 @@ describe('buildAudit weight-at-risk', () => {
     expect(clearance.stale).toBe(false);
   });
 });
+
+describe('cadence vs engine windows', () => {
+  it('shows a complete quarterly backfill still cannot trend or measure volatility', () => {
+    // 3 full years of quarterly readings, ending this quarter.
+    const quarterly = [
+      '2023-09-30','2023-12-31','2024-03-31','2024-06-30','2024-09-30','2024-12-31',
+      '2025-03-31','2025-06-30','2025-09-30','2025-12-31','2026-03-31','2026-06-30',
+    ].map((date, i) => ({ date, value: 110 + i * 0.4 }));
+
+    const audit = buildAudit({ household_debt_gdp: quarterly }, NOW);
+    const debt = audit.find((a) => a.indicator === 'household_debt_gdp')!;
+
+    expect(debt.point_count).toBe(12);
+    expect(debt.stale).toBe(false);
+    // ...and yet:
+    expect(debt.can_trend).toBe(false);
+    expect(debt.can_measure_volatility).toBe(false);
+    // because the cadence itself makes those windows unreachable
+    expect(debt.cadence_blocks_trend).toBe(true);
+    expect(debt.cadence_blocks_volatility).toBe(true);
+  });
+
+  it('does not blame cadence for a weekly series that simply lacks data', () => {
+    const audit = buildAudit({ auction_clearance_rate: CLEARANCE }, NOW);
+    const clearance = audit.find((a) => a.indicator === 'auction_clearance_rate')!;
+    expect(clearance.cadence_blocks_trend).toBe(false);
+    expect(clearance.cadence_blocks_volatility).toBe(false);
+  });
+});

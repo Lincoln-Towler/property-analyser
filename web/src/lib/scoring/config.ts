@@ -5,6 +5,8 @@
 
 export type Impact = 'inverse' | 'direct';
 
+export type Frequency = 'weekly' | 'monthly' | 'quarterly';
+
 export interface IndicatorConfig {
   weight: number;
   impact: Impact;
@@ -12,6 +14,14 @@ export interface IndicatorConfig {
   description: string;
   display_name: string;
   unit: string;
+  /** Publication cadence of the underlying statistic. DISPLAY ONLY — the
+   *  engine's 3-month trend and 6-month volatility windows are unchanged,
+   *  so scoring and the parity suite are unaffected. Used by buildAudit to
+   *  explain why an indicator can never trend: a quarterly series yields at
+   *  most 1 point in a 3-month window and 2 in a 6-month one, against the 2
+   *  and 3 the engine requires. For those, more data cannot help — only a
+   *  frequency-aware window would. */
+  expected_frequency?: Frequency;
   optimal_below?: number;
   healthy_below?: number;
   warning_above?: number;
@@ -42,6 +52,7 @@ export const INDICATORS_CONFIG: Record<string, IndicatorConfig> = {
     danger_above: 5.5,
     impact: 'inverse',
     trend_matters: true,
+    expected_frequency: 'weekly',
     description: 'RBA Cash Rate',
     display_name: 'Interest Rate (RBA Cash Rate)',
     unit: '%',
@@ -53,6 +64,7 @@ export const INDICATORS_CONFIG: Record<string, IndicatorConfig> = {
     optimal_below: 100,
     impact: 'inverse',
     trend_matters: true,
+    expected_frequency: 'quarterly',
     description: 'Debt to GDP Ratio',
     display_name: 'Household Debt to GDP',
     unit: '%',
@@ -64,6 +76,7 @@ export const INDICATORS_CONFIG: Record<string, IndicatorConfig> = {
     oversupply_above: 3.5,
     impact: 'inverse',
     trend_matters: true,
+    expected_frequency: 'monthly',
     description: 'Rental Vacancy',
     display_name: 'Rental Vacancy Rate',
     unit: '%',
@@ -75,6 +88,7 @@ export const INDICATORS_CONFIG: Record<string, IndicatorConfig> = {
     crisis_below: 160000,
     impact: 'direct',
     trend_matters: true,
+    expected_frequency: 'monthly',
     description: 'Annual Building Approvals',
     display_name: 'Building Approvals (Annual)',
     unit: '',
@@ -86,6 +100,7 @@ export const INDICATORS_CONFIG: Record<string, IndicatorConfig> = {
     healthy_below: 25,
     impact: 'inverse',
     trend_matters: true,
+    expected_frequency: 'monthly',
     description: 'Mortgage Stress %',
     display_name: 'Mortgage Stress Rate',
     unit: '%',
@@ -98,6 +113,7 @@ export const INDICATORS_CONFIG: Record<string, IndicatorConfig> = {
     healthy_below: 4.5,
     impact: 'inverse',
     trend_matters: true,
+    expected_frequency: 'monthly',
     description: 'Unemployment Rate',
     display_name: 'Unemployment Rate',
     unit: '%',
@@ -109,6 +125,7 @@ export const INDICATORS_CONFIG: Record<string, IndicatorConfig> = {
     weak_below: 55,
     impact: 'direct',
     trend_matters: true,
+    expected_frequency: 'weekly',
     description: 'Auction Clearance %',
     display_name: 'Auction Clearance Rate',
     unit: '%',
@@ -120,6 +137,7 @@ export const INDICATORS_CONFIG: Record<string, IndicatorConfig> = {
     weak_below: 0.2,
     impact: 'direct',
     trend_matters: false,
+    expected_frequency: 'monthly',
     description: 'Monthly Credit Growth %',
     display_name: 'Credit Growth (Monthly)',
     unit: '%',
@@ -131,6 +149,7 @@ export const INDICATORS_CONFIG: Record<string, IndicatorConfig> = {
     weak_below: 2.5,
     impact: 'direct',
     trend_matters: false,
+    expected_frequency: 'quarterly',
     description: 'Annual Wage Growth %',
     display_name: 'Wage Growth (Annual)',
     unit: '%',

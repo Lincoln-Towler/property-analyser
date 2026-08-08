@@ -14,6 +14,7 @@
 // commit with updated fixtures.
 
 import { INDICATORS_CONFIG, CYCLE_START_YEAR, CYCLE_LENGTH, STALE_AFTER_DAYS } from './config';
+import type { Frequency } from './config';
 import { round1, roundHalfEven, fmtF } from './pyformat';
 
 export interface DataPoint {
@@ -627,6 +628,24 @@ export interface IndicatorAudit {
   can_trend: boolean;
   /** enough points in the 6-month window for volatility to be measurable */
   can_measure_volatility: boolean;
+  /** True when the publication cadence alone makes trend/volatility
+   *  unreachable, so no amount of backfilling will help. A quarterly series
+   *  yields at most 1 point per 3-month window and 2 per 6-month window,
+   *  against the 2 and 3 the engine requires. */
+  cadence_blocks_trend: boolean;
+  cadence_blocks_volatility: boolean;
+  expected_frequency: Frequency | null;
+}
+
+/** Points a cadence reliably places inside a window of N months.
+ *  Months between readings: weekly ~0.23, monthly 1, quarterly 3. A window
+ *  holds floor(months / interval) readings — a 3-month window spans exactly
+ *  one quarterly interval, so it reliably contains 1 quarterly point, and
+ *  a second only under exact date alignment we cannot count on. */
+function reliablePointsInWindow(freq: Frequency | undefined, months: number): number {
+  if (!freq) return Infinity;
+  const intervalMonths = freq === 'weekly' ? 12 / 52 : freq === 'monthly' ? 1 : 3;
+  return Math.floor(months / intervalMonths);
 }
 
 export function buildAudit(series: SeriesMap, now: Date): IndicatorAudit[] {
@@ -665,6 +684,9 @@ export function buildAudit(series: SeriesMap, now: Date): IndicatorAudit[] {
       weight_pct: totalWeight ? (weight / totalWeight) * 100 : 0,
       can_trend: points.filter((p) => p.date >= trendCutoff).length >= 2,
       can_measure_volatility: points.filter((p) => p.date >= volCutoff).length >= 3,
+      cadence_blocks_trend: reliablePointsInWindow(cfg?.expected_frequency, 3) < 2,
+      cadence_blocks_volatility: reliablePointsInWindow(cfg?.expected_frequency, 6) < 3,
+      expected_frequency: cfg?.expected_frequency ?? null,
     });
   }
   return result.sort((a, b) => (INDICATORS_CONFIG[b.indicator]?.weight ?? 0) - (INDICATORS_CONFIG[a.indicator]?.weight ?? 0));

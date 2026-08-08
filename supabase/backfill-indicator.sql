@@ -16,8 +16,24 @@
 -- Economics ~113.4, CEIC ~120.3 for the same quarter). That spread crosses
 -- this project's own warning (110) and danger (120) thresholds, so mixing
 -- sources inside one series will move the score for no real-world reason.
--- The existing 2025-06-30 = 113.7 row is labelled 'ABS'; match whatever
--- series that came from, and record the source on every row you add.
+--
+-- SERIES IDENTIFIED (Aug 2026): the existing 2025-06-30 = 113.7 row comes
+-- from ABS 5232.0. Aggregators reporting the ABS-derived series quote
+-- 113.6 for Jun-2025 and 113.2 for Sep-2025 — i.e. the 113.x family, NOT
+-- the IMF FSI family (108-112) and NOT CEIC (119-120). Take the figures
+-- from the ABS release itself rather than an aggregator; the 0.1 gap
+-- between 113.6 and your 113.7 is a revision or rounding difference and
+-- shows why second-hand values should not be mixed in.
+--
+-- ⚠️ AND NOTE WHAT A BACKFILL WILL AND WILL NOT FIX.
+-- History makes the chart real and gives context. It will NOT unfreeze the
+-- weight: household_debt_gdp is quarterly, and the engine needs 2 readings
+-- inside 3 months to trend and 3 inside 6 months to measure volatility. A
+-- quarterly series reliably supplies 1 and 2. Verified in
+-- web/tests/window-context.test.ts: a complete 12-quarter backfill still
+-- reports can_trend=false and can_measure_volatility=false. Only
+-- frequency-aware windows would change that — a scoring change, so it is
+-- deliberately not made here.
 --
 -- WHERE TO GET THE NUMBERS
 --   household_debt_gdp   ABS 5232.0 Australian National Accounts: Finance
