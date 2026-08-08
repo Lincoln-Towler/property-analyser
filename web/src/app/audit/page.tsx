@@ -1,6 +1,7 @@
 import { getSiteData } from '@/lib/data';
 import { buildAudit } from '@/lib/scoring/engine';
 import { INDICATORS_CONFIG, STALE_AFTER_DAYS } from '@/lib/scoring/config';
+import { auditPropertyData } from '@/lib/property-audit';
 import { SetupNotice } from '@/components/SetupNotice';
 
 export const revalidate = 3600;
@@ -10,6 +11,11 @@ export default async function AuditPage() {
   if (!data) return <SetupNotice />;
 
   const audit = buildAudit(data.series, new Date());
+  const propertyAudit = auditPropertyData(data.propertyData);
+
+  // Scored weight that cannot move: stale, or unable to trend at all.
+  const frozen = audit.filter((a) => a.weight > 0 && (a.stale || !a.can_trend));
+  const frozenWeightPct = frozen.reduce((sum, a) => sum + a.weight_pct, 0);
 
   return (
     <div className="space-y-6">
@@ -23,6 +29,40 @@ export default async function AuditPage() {
           labelled <em>manual</em> come from the current table.
         </p>
       </header>
+
+      {frozen.length > 0 && (
+        <section className="rounded-xl border border-amber-700/60 bg-amber-950/30 p-5 text-sm">
+          <h2 className="mb-1 font-medium">
+            {frozenWeightPct.toFixed(0)}% of the score is riding on data that can&apos;t move
+          </h2>
+          <p className="mb-3 text-xs text-slate-400">
+            These indicators still carry their full weight, but are stale or have too few recent
+            readings to produce a trend — so they hold the score in place rather than informing
+            it. Nothing is excluded from scoring; the fix is more data, not different maths.
+          </p>
+          <ul className="space-y-1 text-slate-300">
+            {frozen.map((a) => (
+              <li key={a.indicator}>
+                <span className="font-medium">{a.display_name}</span> — carries{' '}
+                <span className="tabular-nums">{a.weight}</span>/135 (
+                {a.weight_pct.toFixed(1)}% of the score),{' '}
+                {a.days_old === null ? 'no data' : `${a.days_old} days old`},{' '}
+                {a.point_count} {a.point_count === 1 ? 'reading' : 'readings'}
+                {!a.can_trend && ', cannot trend'}
+                {!a.can_measure_volatility && ', volatility unmeasurable'}
+                {a.cadence_blocks_trend && (
+                  <span className="text-amber-300">
+                    {' '}
+                    — {a.expected_frequency} data can never fill a 3-month trend window
+                    {a.cadence_blocks_volatility ? ' or a 6-month volatility window' : ''}, so
+                    backfilling will not change this
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-800">
         <table className="w-full min-w-[640px] text-sm">
@@ -94,6 +134,78 @@ export default async function AuditPage() {
               as a trailing 12-month annualised rate to match the annual thresholds.
             </p>
           ))}
+        </section>
+      )}
+
+      {data.propertyData.length > 0 && (
+        <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 text-sm">
+          <h2 className="mb-1 font-medium">Property data quality</h2>
+          <p className="mb-3 text-xs text-slate-400">
+            {propertyAudit.locations} locations, newest snapshot {propertyAudit.latestDate ?? '—'}.
+            Nothing here is excluded from charts or scoring — these are readings worth a second
+            look, not errors. Locations mix capitals, suburbs and regional towns, so an extreme
+            value is often a narrow sub-market sample rather than a bad number.
+          </p>
+
+          {propertyAudit.flags.length > 0 && (
+            <div className="mb-4">
+              <h3 className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+                Readings to verify against source
+              </h3>
+              <ul className="space-y-1 text-slate-300">
+                {propertyAudit.flags.map((f) => (
+                  <li key={`${f.location}-${f.metric}-${f.date}`}>
+                    <span className="font-medium">{f.location}</span> {f.metric}{' '}
+                    <span className="tabular-nums">{f.value}</span> on {f.date} — {f.note}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {propertyAudit.duplicates.length > 0 && (
+            <div className="mb-4">
+              <h3 className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+                Duplicate snapshots ({propertyAudit.duplicates.length})
+              </h3>
+              <p className="mb-1 text-xs text-slate-400">
+                Identical values recorded under two dates within three weeks — a re-import. Every
+                consumer reads the newest row only, so scores are unaffected; the extra rows just
+                double up on charts.
+              </p>
+              <ul className="space-y-1 text-slate-300">
+                {propertyAudit.duplicates.slice(0, 8).map((d) => (
+                  <li key={`${d.location}-${d.metric}`}>
+                    <span className="font-medium">{d.location}</span> {d.metric} ={' '}
+                    <span className="tabular-nums">{d.value}</span> on {d.dates.join(' and ')}
+                  </li>
+                ))}
+                {propertyAudit.duplicates.length > 8 && (
+                  <li className="text-slate-500">
+                    …and {propertyAudit.duplicates.length - 8} more
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {propertyAudit.missingFromLatest.length > 0 && (
+            <div>
+              <h3 className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+                Missing from the newest snapshot
+              </h3>
+              <p className="text-slate-300">
+                {propertyAudit.missingFromLatest.join(', ')} — carried forward from an older date,
+                so these sit beside fresher metrics in any comparison.
+              </p>
+            </div>
+          )}
+
+          {propertyAudit.flags.length === 0 &&
+            propertyAudit.duplicates.length === 0 &&
+            propertyAudit.missingFromLatest.length === 0 && (
+              <p className="text-slate-300">No anomalies detected.</p>
+            )}
         </section>
       )}
 

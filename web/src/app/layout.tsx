@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 const NAV = [
   { href: '/', label: 'Dashboard' },
   { href: '/indicators', label: 'Indicators' },
+  { href: '/locations', label: 'Locations' },
   { href: '/cycle', label: 'Cycle' },
   { href: '/btc', label: 'BTC' },
   { href: '/audit', label: 'Data Audit' },

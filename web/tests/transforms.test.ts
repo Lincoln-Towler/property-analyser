@@ -45,10 +45,13 @@ describe('building approvals annualisation', () => {
     expect(looksMonthly([{ date: '2026-01-01', value: 172000 }])).toBe(false);
   });
 
-  it('annualises each point from its trailing 12-month window', () => {
+  it('annualises from the trailing 12-month window and drops partial windows', () => {
     const out = annualizeMonthly(monthly);
-    // first point: only itself in window -> 14883 * 12
-    expect(out[0].value).toBe(14883 * 12);
+    // 7 readings, minimum window 6 -> only the 6th and 7th points survive.
+    // Without this guard the earliest point annualised a single month
+    // (14883*12 = 178596) and the widening window drew a fake uptrend.
+    expect(out).toHaveLength(2);
+    expect(out.map((p) => p.date)).toEqual(['2026-05-01', '2026-06-30']);
     // last point: mean of all 7 readings * 12
     const mean = monthly.reduce((a, p) => a + p.value, 0) / monthly.length;
     expect(out[out.length - 1].value).toBe(Math.round(mean * 12));
@@ -57,12 +60,17 @@ describe('building approvals annualisation', () => {
     expect(out[out.length - 1].value).toBeLessThan(260000);
   });
 
+  it('emits nothing when there are too few readings to annualise honestly', () => {
+    expect(annualizeMonthly(monthly.slice(0, 3))).toEqual([]);
+  });
+
   it('applies via prepareSeries only when the series looks monthly', () => {
     const annualScale = { building_approvals: [{ date: '2026-01-01', value: 172000 }] };
     expect(prepareSeries(annualScale).adjustments.annualized).toEqual([]);
     const monthlyScale = { building_approvals: monthly };
     const prepared = prepareSeries(monthlyScale);
     expect(prepared.adjustments.annualized).toEqual(['building_approvals']);
-    expect(prepared.series.building_approvals[0].value).toBe(14883 * 12);
+    // first surviving point is the 6th reading (first full-enough window)
+    expect(prepared.series.building_approvals[0].date).toBe('2026-05-01');
   });
 });

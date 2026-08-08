@@ -46,15 +46,26 @@ function monthsBeforeISO(dateISO: string, months: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Trailing-12-month mean x 12 for each point of a monthly series. */
+/** Minimum readings required in the trailing window before an annualised
+ *  point is emitted. Without this, the earliest points are annualised from
+ *  a 1-2 month window and the widening window alone draws a rising line —
+ *  an artifact, not a trend. */
+export const MIN_ANNUALIZE_WINDOW = 6;
+
+/** Trailing-12-month mean x 12 for each point of a monthly series.
+ *  Points whose trailing window holds fewer than MIN_ANNUALIZE_WINDOW
+ *  readings are dropped rather than extrapolated. */
 export function annualizeMonthly(points: DataPoint[]): DataPoint[] {
   const sorted = [...points].sort((a, b) => (a.date < b.date ? -1 : 1));
-  return sorted.map((p) => {
+  const out: DataPoint[] = [];
+  for (const p of sorted) {
     const windowStart = monthsBeforeISO(p.date, 12);
     const window = sorted.filter((q) => q.date > windowStart && q.date <= p.date);
+    if (window.length < MIN_ANNUALIZE_WINDOW) continue;
     const mean = window.reduce((a, q) => a + q.value, 0) / window.length;
-    return { ...p, value: Math.round(mean * 12) };
-  });
+    out.push({ ...p, value: Math.round(mean * 12) });
+  }
+  return out;
 }
 
 /** Heuristic: are these building-approvals readings monthly-scale? The two

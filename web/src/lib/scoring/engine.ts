@@ -14,6 +14,7 @@
 // commit with updated fixtures.
 
 import { INDICATORS_CONFIG, CYCLE_START_YEAR, CYCLE_LENGTH, STALE_AFTER_DAYS } from './config';
+import type { Frequency } from './config';
 import { round1, roundHalfEven, fmtF } from './pyformat';
 
 export interface DataPoint {
@@ -532,6 +533,80 @@ function roundHalfEven2(x: number): number {
 }
 
 // ---------------------------------------------------------------------------
+// Window context — DISPLAY ONLY. Never feeds trend_bonus or any score.
+//
+// getIndicatorTrend compares only the two most recent points, which is
+// faithful to the Python original but blind on densely-sampled series: with
+// weekly auction clearance running 54.7 -> 45.3 (a monotone -17% slide over
+// six readings), the last two are 47.2 -> 45.3 = -4%, under the 5% gate, so
+// the engine reports "stable". That is the number the user reads. Rather
+// than change the scoring rule (which would break parity), report the honest
+// shape of the window alongside it.
+
+export interface WindowContext {
+  pointsInWindow: number;
+  spanDays: number;
+  firstValue: number;
+  lastValue: number;
+  changePct: number;
+  /** consecutive step direction agreement, e.g. 5 of 5 declines */
+  monotoneSteps: number;
+  totalSteps: number;
+  direction: 'rising' | 'falling' | 'mixed';
+}
+
+export function getWindowContext(
+  points: DataPoint[] | undefined,
+  now: Date,
+  months = 3,
+): WindowContext | null {
+  const cutoff = monthsAgoISO(now, months);
+  const window = [...(points ?? [])]
+    .filter((p) => p.date >= cutoff)
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  if (window.length < 3) return null; // 2 points add nothing over the trend
+
+  const first = window[0];
+  const last = window[window.length - 1];
+  const changePct = first.value === 0 ? 0 : ((last.value - first.value) / first.value) * 100;
+
+  let up = 0;
+  let down = 0;
+  for (let i = 1; i < window.length; i++) {
+    const delta = window[i].value - window[i - 1].value;
+    if (delta > 0) up++;
+    else if (delta < 0) down++;
+  }
+  const totalSteps = window.length - 1;
+  const monotoneSteps = Math.max(up, down);
+  const direction = up === monotoneSteps && up > down ? 'rising' : down > up ? 'falling' : 'mixed';
+
+  const spanDays = Math.round(
+    (new Date(last.date + 'T00:00:00Z').getTime() - new Date(first.date + 'T00:00:00Z').getTime()) /
+      86400000,
+  );
+
+  return {
+    pointsInWindow: window.length,
+    spanDays,
+    firstValue: first.value,
+    lastValue: last.value,
+    changePct,
+    monotoneSteps,
+    totalSteps,
+    direction,
+  };
+}
+
+/** True when the window tells a materially different story than the
+ *  two-point trend the engine scored — i.e. worth surfacing to the user. */
+export function windowContradictsTrend(ctx: WindowContext | null, trend: string): boolean {
+  if (!ctx) return false;
+  if (Math.abs(ctx.changePct) < 5) return false;
+  return trend === 'stable' || (ctx.direction !== 'mixed' && ctx.direction !== trend);
+}
+
+// ---------------------------------------------------------------------------
 // Audit — new capability (not in the Python app): per-indicator freshness so
 // stale single-point indicators are visible instead of silently anchoring
 // the score.
@@ -545,6 +620,32 @@ export interface IndicatorAudit {
   stale: boolean;
   point_count: number;
   sources: Record<string, number>;
+  /** 0 for unscored indicators */
+  weight: number;
+  /** this indicator's share of the total weight, as a percentage */
+  weight_pct: number;
+  /** enough points in the 3-month window for the trend rule to fire */
+  can_trend: boolean;
+  /** enough points in the 6-month window for volatility to be measurable */
+  can_measure_volatility: boolean;
+  /** True when the publication cadence alone makes trend/volatility
+   *  unreachable, so no amount of backfilling will help. A quarterly series
+   *  yields at most 1 point per 3-month window and 2 per 6-month window,
+   *  against the 2 and 3 the engine requires. */
+  cadence_blocks_trend: boolean;
+  cadence_blocks_volatility: boolean;
+  expected_frequency: Frequency | null;
+}
+
+/** Points a cadence reliably places inside a window of N months.
+ *  Months between readings: weekly ~0.23, monthly 1, quarterly 3. A window
+ *  holds floor(months / interval) readings — a 3-month window spans exactly
+ *  one quarterly interval, so it reliably contains 1 quarterly point, and
+ *  a second only under exact date alignment we cannot count on. */
+function reliablePointsInWindow(freq: Frequency | undefined, months: number): number {
+  if (!freq) return Infinity;
+  const intervalMonths = freq === 'weekly' ? 12 / 52 : freq === 'monthly' ? 1 : 3;
+  return Math.floor(months / intervalMonths);
 }
 
 export function buildAudit(series: SeriesMap, now: Date): IndicatorAudit[] {
@@ -561,15 +662,31 @@ export function buildAudit(series: SeriesMap, now: Date): IndicatorAudit[] {
       const s = p.source ?? 'unknown';
       sources[s] = (sources[s] ?? 0) + 1;
     }
+    // Weight at risk: a stale or single-point indicator still carries its
+    // full weight, but can never trend or register volatility. Surfacing
+    // that is the honest alternative to silently dropping it from the score.
+    const cfg = INDICATORS_CONFIG[name];
+    const weight = cfg?.weight ?? 0;
+    const totalWeight = Object.values(INDICATORS_CONFIG).reduce((a, c) => a + c.weight, 0);
+    const trendCutoff = monthsAgoISO(now, 3);
+    const volCutoff = monthsAgoISO(now, 6);
+
     result.push({
       indicator: name,
-      display_name: INDICATORS_CONFIG[name]?.display_name ?? name.replace(/_/g, ' '),
+      display_name: cfg?.display_name ?? name.replace(/_/g, ' '),
       latest_date: latest?.date ?? null,
       latest_value: latest?.value ?? null,
       days_old: daysOld,
       stale: daysOld === null || daysOld > STALE_AFTER_DAYS,
       point_count: points.length,
       sources,
+      weight,
+      weight_pct: totalWeight ? (weight / totalWeight) * 100 : 0,
+      can_trend: points.filter((p) => p.date >= trendCutoff).length >= 2,
+      can_measure_volatility: points.filter((p) => p.date >= volCutoff).length >= 3,
+      cadence_blocks_trend: reliablePointsInWindow(cfg?.expected_frequency, 3) < 2,
+      cadence_blocks_volatility: reliablePointsInWindow(cfg?.expected_frequency, 6) < 3,
+      expected_frequency: cfg?.expected_frequency ?? null,
     });
   }
   return result.sort((a, b) => (INDICATORS_CONFIG[b.indicator]?.weight ?? 0) - (INDICATORS_CONFIG[a.indicator]?.weight ?? 0));

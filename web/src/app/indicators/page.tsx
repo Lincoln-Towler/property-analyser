@@ -1,4 +1,5 @@
 import { getSiteData } from '@/lib/data';
+import { getIndicatorTrend, getWindowContext, windowContradictsTrend } from '@/lib/scoring/engine';
 import { INDICATORS_CONFIG, EXTRA_INDICATOR_NAMES } from '@/lib/scoring/config';
 import { indicatorStatus, indicatorTargetText } from '@/lib/scoring/ui-helpers';
 import { IndicatorChart } from '@/components/IndicatorChart';
@@ -27,6 +28,7 @@ export default async function IndicatorsPage() {
   const data = await getSiteData();
   if (!data) return <SetupNotice />;
 
+  const now = new Date();
   const names = [
     ...Object.keys(INDICATORS_CONFIG),
     ...Object.keys(data.series).filter((n) => !(n in INDICATORS_CONFIG)),
@@ -48,6 +50,11 @@ export default async function IndicatorsPage() {
           const target = cfg ? indicatorTargetText(cfg) : null;
           const unit = cfg?.unit ?? '';
           const isAnnualized = data.adjustments.annualized.includes(key);
+          // Honest window shape alongside the scored two-point trend —
+          // surfaced only when the two disagree (see getWindowContext).
+          const [scoredTrend] = getIndicatorTrend(points, now, 3);
+          const windowCtx = getWindowContext(points, now, 3);
+          const showWindow = windowContradictsTrend(windowCtx, scoredTrend);
 
           return (
             <section key={key} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
@@ -73,6 +80,19 @@ export default async function IndicatorsPage() {
                   {isAnnualized && (
                     <p className="text-xs text-sky-400/80">
                       annualised from monthly readings (trailing 12-month rate)
+                    </p>
+                  )}
+                  {showWindow && windowCtx && (
+                    <p className="mt-1 text-xs text-amber-400">
+                      ⚠️ scored trend reads <em>{scoredTrend}</em>, but the last{' '}
+                      {windowCtx.pointsInWindow} readings over {windowCtx.spanDays} days moved{' '}
+                      {windowCtx.changePct > 0 ? '+' : ''}
+                      {windowCtx.changePct.toFixed(1)}%
+                      {windowCtx.monotoneSteps === windowCtx.totalSteps
+                        ? ` (${windowCtx.totalSteps} of ${windowCtx.totalSteps} consecutive ${
+                            windowCtx.direction === 'falling' ? 'declines' : 'rises'
+                          })`
+                        : ''}
                     </p>
                   )}
                 </div>
