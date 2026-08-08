@@ -1,5 +1,33 @@
 # Changelog
 
+## August 2026 - Data quality sweep + Location Analysis
+
+### `/locations` — Location Analysis rebuilt
+- Deferred during the rebuild because `property_data` was stale; revived once an Aug 2026 snapshot landed for all 12 locations
+- Regional divergence summary, all-locations ranked table, head-to-head comparison (two selectors, metric table, dual median-price chart, recommendation)
+- `locationScore()` ported from `calculate_location_score()`; `sales_volume` declares no winner (readings mix geographic scope and period)
+
+### Outlier audit — 31 findings, zero deletions
+- Adversarial review **rejected every proposed deletion**. Several accusations were wrong: Brisbane's −30.93% growth was called impossible by comparing two non-overlapping windows; Sydney's 19.83% vacancy sits inside the project's own plausibility band and comes from a sub-market sample (sales_volume 13, DOM 106)
+- Standing rule recorded in [[Cutover Checklist]] and `CLAUDE.md`: **surface anomalies, never delete them**
+- `lib/property-audit.ts` + `/audit` section: readings to verify, duplicate snapshots, metrics missing from the newest snapshot
+- Only data touched all month: the four n8n scraper zeros deleted in July
+
+### Scoring honesty (no score changes)
+- `getWindowContext` — the two-point trend rule called auction clearance "stable" while it fell 17.2% over 6 readings (5 of 5 consecutive declines). The contradiction is now shown on `/indicators`; scoring and the parity suite untouched
+- **Weight at risk** on `/audit`: ~43% of the score rides on indicators that cannot move; `household_debt_gdp` alone is 18.5% off one 404-day-old reading
+- **Cadence flags**: quarterly indicators can *never* satisfy a 3-month trend or 6-month volatility window — proven by test, so `/audit` no longer implies a backfill would help
+- Zero-valued readings now count as real values in `locationScore`, matching `calculateRegionalDivergence` (the Python's `if x and x > n` was a None-check, not a decision about zero)
+
+### Data-layer fixes
+- Building-approvals annualisation no longer emits partial-window points (a widening window alone drew a fake uptrend)
+- `getSiteData` now records query errors: a denied read (RLS) and an empty table looked identical, so `/locations` could report "no data" when the query had actually failed
+- Migration `0006`: plausibility guard — hard CHECK on manual entry, skip-trigger on the n8n feed
+- Household debt series identified as **ABS 5232.0** (113.x family, not IMF 108–112 or CEIC 119–120); no figures inserted, `supabase/backfill-indicator.sql` records which family to use
+
+### `CLAUDE.md` added
+Project context for future sessions: deployment flow, the never-delete-data rule, parity discipline, decisions already made, open issues.
+
 ## June/July 2026 - Rebuild Phase 1 (Next.js)
 
 ### Rebuild kickoff — engine port + public site

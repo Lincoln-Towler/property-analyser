@@ -20,6 +20,10 @@ export interface SiteData {
   scoreHistory: ScoreHistoryRow[];
   adjustments: SeriesAdjustments;
   fetchedAt: string;
+  /** Query failures for the optional tables. An empty result and a denied
+   *  query look identical downstream, so record the difference: "no rows"
+   *  and "you cannot read this table" need very different fixes. */
+  errors: { propertyData?: string; scoreHistory?: string };
 }
 
 function monthsAgoISO(months: number): string {
@@ -55,7 +59,15 @@ export const getSiteData = cache(async (): Promise<SiteData | null> => {
   ]);
 
   if (indicators.error) throw new Error(`indicators query failed: ${indicators.error.message}`);
-  // property_data / score history are optional — tolerate missing tables
+
+  // property_data and market_score_history are optional — a missing table
+  // must not take the whole site down. But record WHY they are empty: a
+  // denied read (RLS) and a genuinely empty table are indistinguishable
+  // once the rows are gone, and they need opposite fixes.
+  const errors: SiteData['errors'] = {};
+  if (property.error) errors.propertyData = property.error.message;
+  if (history.error) errors.scoreHistory = history.error.message;
+
   const rawSeries: SeriesMap = {};
   for (const row of indicators.data ?? []) {
     (rawSeries[row.indicator_name] ??= []).push({
@@ -79,5 +91,12 @@ export const getSiteData = cache(async (): Promise<SiteData | null> => {
     .map((r) => ({ ...r, final_score: Number(r.final_score) }))
     .reverse();
 
-  return { series, propertyData, scoreHistory, adjustments, fetchedAt: new Date().toISOString() };
+  return {
+    series,
+    propertyData,
+    scoreHistory,
+    adjustments,
+    errors,
+    fetchedAt: new Date().toISOString(),
+  };
 });

@@ -24,14 +24,31 @@ export default async function LocationsPage() {
 
   const rows = data.propertyData;
   if (!rows.length) {
+    const queryFailed = data.errors.propertyData;
     return (
       <div className="space-y-4">
         <h1 className="text-xl font-semibold">Location Analysis</h1>
-        <p className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-300">
-          No property data in the last 12 months. Add rows to{' '}
-          <code className="rounded bg-slate-800 px-1">property_data</code> (location, metric_name,
-          value, date) in Supabase to populate this page.
-        </p>
+        {queryFailed ? (
+          <div className="rounded-xl border border-red-700/60 bg-red-950/30 p-6 text-sm text-slate-200">
+            <p className="mb-2 font-medium">
+              The property_data query failed — this is not an empty table.
+            </p>
+            <p className="mb-3 font-mono text-xs text-red-300">{queryFailed}</p>
+            <p className="text-slate-300">
+              Most likely Row Level Security: the site reads with the anon key, which needs a
+              SELECT policy on <code className="rounded bg-slate-800 px-1">property_data</code>.
+              Migration{' '}
+              <code className="rounded bg-slate-800 px-1">0004_enable_rls.sql</code> creates one —
+              check it was applied, then confirm in Supabase → Authentication → Policies.
+            </p>
+          </div>
+        ) : (
+          <p className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-300">
+            No property data in the last 12 months. Add rows to{' '}
+            <code className="rounded bg-slate-800 px-1">property_data</code> (location,
+            metric_name, value, date) in Supabase to populate this page.
+          </p>
+        )}
       </div>
     );
   }
