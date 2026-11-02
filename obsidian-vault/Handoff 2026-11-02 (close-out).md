@@ -28,9 +28,9 @@ These are the limits on a change nobody reviews:
 
 See [[Cutover Checklist]] for the steps.
 
-1. Rotate the database password, and delete the Streamlit app.
+1. Rotate the database password. Deleting the Streamlit app is optional: it's already stopped, and this cuts it off for good.
 2. Optional: paste `supabase/migrations/0016_drop_empty_legacy_tables.sql` into the SQL Editor. Claude's attempt was stopped by a safety check on bulk deletes.
-3. Copy the updated launcher `index.html` to the NAS (see the launcher's `CLAUDE.md`).
+3. Copy the updated launcher `index.html` to the NAS in Finder (see the launcher's `CLAUDE.md`). Claude and the Terminal panel can't reach that share.
 4. Optional: re-import `n8n/workflows/Cowen Videos - BTC Flag Suggestions.json`. It tells Claude there's no human check, so it should make fewer marginal changes, and saves retirements first. The live workflow works without it.
 
 ## Why the market score moved on 2 Nov

@@ -130,6 +130,7 @@ Published figures differ by methodology: Australian household debt-to-GDP spans 
 - **Next.js over a static site**, for a live site.
 - **Zero-valued readings are real values, not absences.** `locationScore` uses a presence check, matching `calculateRegionalDivergence`. The Python's `if x and x > n` idiom was a None-check, not a decision about zero.
 - **Location Analysis was deferred, then rebuilt** as `/locations` once an August 2026 snapshot landed.
+- **Don't redeploy Streamlit as it was.** The page has no login, and its Data Management tab can add, edit and delete production data using the owner password. Its code stays in `legacy/` for the parity tests.
 - **The BTC flags stay.** Replacing them with one number per video was considered and declined in November 2026. It's known and accepted that the ±2 cap usually absorbs a single flag change.
 
 ## Known open issues
