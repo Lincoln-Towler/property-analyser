@@ -140,11 +140,21 @@ export function andersonState(now: Date, cycleStart: number = CYCLE_START_YEAR):
       `🟢 **PREPARE CASH** for the predicted ${crashStartYear}-${crashEndYear} downturn`,
       `🟢 **BEST BUYING OPPORTUNITY** predicted for ${bestBuyStart}-${bestBuyEnd}`,
     ];
-  } else {
+  } else if (currentYear < bestBuyStart) {
     recommendations = [
       '🔴 **DO NOT BUY** yet - crash phase in progress',
-      '🟢 **HOLD CASH** - wait for clear bottom signals',
+      '🟡 **HOLD CASH** - wait for clear bottom signals',
       `🟢 **BEST BUYING OPPORTUNITY** predicted for ${bestBuyStart}-${bestBuyEnd}`,
+      '🟡 Watch for stabilisation in vacancy rates and clearance rates',
+    ];
+  } else {
+    // Inside (or at the end of) the predicted best-buying window: telling
+    // readers "do not buy" and "best time to buy is now" at once was the
+    // contradiction the old copy carried through 2025-2026.
+    recommendations = [
+      `🟢 **BEST BUYING WINDOW** - the model puts it at ${bestBuyStart}-${bestBuyEnd}, which is now`,
+      '🟡 **BUY SELECTIVELY** once bottom signals confirm - stabilising prices, rate cuts, looser credit',
+      '🟡 **KEEP A CASH BUFFER** - the exact bottom is only visible in hindsight',
       '🟡 Watch for stabilisation in vacancy rates and clearance rates',
     ];
   }

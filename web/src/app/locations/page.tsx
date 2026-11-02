@@ -7,8 +7,17 @@ import {
 } from '@/lib/scoring/location';
 import { LocationCompare, type PriceSeriesPoint } from '@/components/LocationCompare';
 import { SetupNotice } from '@/components/SetupNotice';
+import { Card, DataStamp, PageHeader, SectionTitle } from '@/components/ui';
+import { LOCATION_GOOD, scoreTone } from '@/lib/theme';
+import { fmtDate } from '@/lib/format';
 
 export const revalidate = 3600;
+
+function metricTone(metric: string, value: number | undefined): string {
+  if (value === undefined) return 'text-slate-500';
+  if (metric === 'annual_growth') return value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-slate-300';
+  return 'text-slate-300';
+}
 
 const TABLE_METRICS = [
   'median_price',
@@ -26,7 +35,7 @@ export default async function LocationsPage() {
   if (!rows.length) {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-semibold">Location Analysis</h1>
+        <PageHeader title="Location analysis" />
         <p className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-300">
           No property data in the last 12 months. Add rows to{' '}
           <code className="rounded bg-slate-800 px-1">property_data</code> (location, metric_name,
@@ -52,23 +61,20 @@ export default async function LocationsPage() {
 
   const best = scored[0];
   const worst = scored[scored.length - 1];
+  const asOfDates = [...new Set(scored.map((s) => s.latestDate ?? ''))];
+  const sharedAsOf = asOfDates.length === 1 ? asOfDates[0] : null;
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="text-xl font-semibold">Location Analysis</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          {scored.length} locations scored on their latest readings. The investment score starts at
-          50 and adjusts for annual growth, rental yield, vacancy rate and days on market —
-          the same formula the Streamlit app used.
-        </p>
-      </header>
+      <PageHeader title="Location analysis">
+        {scored.length} locations scored on their latest readings. The investment score starts at 50 and
+        adjusts for annual growth, rental yield, vacancy rate and days on market — the same formula the
+        Streamlit app used.
+      </PageHeader>
 
       {divergence && (
-        <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
-          <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-slate-400">
-            Regional divergence
-          </h2>
+        <Card>
+          <SectionTitle>Regional divergence</SectionTitle>
           <p className="text-sm text-slate-300">
             Spread of <strong>{divergence.divergence}</strong> points between the strongest and
             weakest markets ({best.location} {best.score} → {worst.location} {worst.score}).{' '}
@@ -84,71 +90,69 @@ export default async function LocationsPage() {
               </>
             )}
           </p>
-        </section>
+        </Card>
       )}
 
       <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
+        <SectionTitle
+          right={sharedAsOf ? <span className="text-xs text-slate-500">latest readings as of {fmtDate(sharedAsOf)}</span> : undefined}
+        >
           All locations, ranked
-        </h2>
+        </SectionTitle>
         <div className="overflow-x-auto rounded-xl border border-slate-800">
           <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-400">
+            <thead className="bg-slate-900 text-left text-xs uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-4 py-3">#</th>
                 <th className="px-4 py-3">Location</th>
                 <th className="px-4 py-3">Score</th>
                 {TABLE_METRICS.map((m) => (
-                  <th key={m} className="px-4 py-3">
+                  <th key={m} className="px-4 py-3 text-right">
                     {METRIC_LABELS[m]}
                   </th>
                 ))}
-                <th className="px-4 py-3">As of</th>
+                {!sharedAsOf && <th className="px-4 py-3">As of</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {scored.map((loc, i) => (
-                <tr key={loc.location}>
-                  <td className="px-4 py-3 tabular-nums text-slate-500">{i + 1}</td>
-                  <td className="px-4 py-3 font-medium">{loc.location}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`tabular-nums font-semibold ${
-                        loc.score >= 70
-                          ? 'text-emerald-400'
-                          : loc.score >= 40
-                            ? 'text-amber-400'
-                            : 'text-red-400'
-                      }`}
-                    >
-                      {loc.score}
-                    </span>
-                  </td>
-                  {TABLE_METRICS.map((m) => (
-                    <td key={m} className="px-4 py-3 tabular-nums text-slate-300">
-                      {formatMetric(m, loc.metrics[m]?.value)}
+              {scored.map((loc, i) => {
+                const tone = scoreTone(loc.score, LOCATION_GOOD);
+                return (
+                  <tr key={loc.location} className="hover:bg-slate-900/60">
+                    <td className="px-4 py-3 tabular-nums text-slate-500">{i + 1}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium">{loc.location}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-7 tabular-nums font-semibold ${tone.text}`}>{loc.score}</span>
+                        <div className="h-1.5 w-16 rounded-full bg-slate-800" aria-hidden>
+                          <div className={`h-1.5 rounded-full ${tone.bar}`} style={{ width: `${loc.score}%` }} />
+                        </div>
+                      </div>
                     </td>
-                  ))}
-                  <td className="px-4 py-3 tabular-nums text-xs text-slate-500">
-                    {loc.latestDate ?? '—'}
-                  </td>
-                </tr>
-              ))}
+                    {TABLE_METRICS.map((m) => (
+                      <td key={m} className={`whitespace-nowrap px-4 py-3 text-right tabular-nums ${metricTone(m, loc.metrics[m]?.value)}`}>
+                        {formatMetric(m, loc.metrics[m]?.value)}
+                      </td>
+                    ))}
+                    {!sharedAsOf && (
+                      <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums text-slate-500">
+                        {fmtDate(loc.latestDate)}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
-          Head to head
-        </h2>
+        <SectionTitle>Head to head</SectionTitle>
         <LocationCompare scored={scored} priceSeries={priceSeries} />
       </section>
 
-      <p className="text-xs text-slate-500">
-        Data as of {data.fetchedAt.slice(0, 16).replace('T', ' ')} UTC
-      </p>
+      <DataStamp fetchedAt={data.fetchedAt} />
     </div>
   );
 }
