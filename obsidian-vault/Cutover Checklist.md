@@ -9,7 +9,7 @@ The move from Streamlit to the Next.js site. Only the last steps are left. Backg
 - [x] Applied the migrations, up to `0015`
 - [x] Switched n8n to upsert
 - [x] Deployed to Vercel, with the daily score snapshot running since 14 July
-- [x] Parallel run, which is over: merging the close-out PR moves the Streamlit code to `legacy/`, so the old app stops working
+- [x] Parallel run, which is over. The Streamlit code moved to `legacy/` on 2 Nov, so the old app should no longer start
 
 ## Left to do (about 5 minutes)
 
