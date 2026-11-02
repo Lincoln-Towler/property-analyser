@@ -28,18 +28,20 @@ These are the limits on a change nobody reviews:
 
 See [[Cutover Checklist]] for the steps.
 
-1. Merge the two PRs.
-2. Rotate the database password, and delete the Streamlit app.
-3. Optional: paste `supabase/migrations/0016_drop_empty_legacy_tables.sql` into the SQL Editor. Claude's attempt was stopped by a safety check on bulk deletes.
-4. Copy the updated launcher `index.html` to the NAS (see the launcher's `CLAUDE.md`).
-5. Optional: re-import `n8n/workflows/Cowen Videos - BTC Flag Suggestions.json`. It only tidies the prompt wording and notes, and the live workflow works without it.
+1. Rotate the database password, and delete the Streamlit app. It's already stopped, so deleting it only clears away a dead page.
+2. Optional: paste `supabase/migrations/0016_drop_empty_legacy_tables.sql` into the SQL Editor. Claude's attempt was stopped by a safety check on bulk deletes.
+3. Copy the updated launcher `index.html` to the NAS in Finder (see the launcher's `CLAUDE.md`). Claude and the Terminal panel can't reach that share.
+4. Optional: re-import `n8n/workflows/Cowen Videos - BTC Flag Suggestions.json`. It tells Claude there's no human check, so it should make fewer marginal changes, and saves retirements first. The live workflow works without it.
 
 ## Why the market score moved on 2 Nov
 
 The score went from 44.46 to 43.02 because of that day's data cleanup, not the market. Expect that step in the score history. Re-running the engine on the cleaned data gives 43.02 for every date tested, from 25 Oct onward.
 
-## Decisions made on 2 Nov
+## Decisions made
 
+- **Streamlit is dropped (3 Nov).** Its code stays in `legacy/` only because the parity fixtures were generated from it.
+- **Site design waits (3 Nov).** Work on the Vercel UI comes later, once the data side is proven to work.
+- **The BTC flags stay (3 Nov).** Replacing them with one number per video was considered and declined. It's known and accepted that the ±2 cap usually absorbs a single flag change.
 - **No approval process, and nothing writable on the website.** Lincoln's call. The approval screen and `/admin` page are off the table.
 - **Legacy `property_data` rows stay,** flagged on `/audit`, under the rule against deleting anomalies.
 - **Price bands don't come from the workflow.** The flags are capped; the bands aren't. A misread video could move the score far more through a band, and they rarely change, so they stay as deliberate edits.
@@ -47,15 +49,8 @@ The score went from 44.46 to 43.02 because of that day's data cleanup, not the m
 
 ## Open questions
 
-- **Replace the flags with one number?** See below.
 - **Fix the monthly trend window?** Monthly readings are dated the first of the month, so from the 2nd until the next release, the reading from three months ago falls outside the engine's 3-month window. That's why `/audit` jumped from 22% to 70% "can't move" on 2 Nov. The score didn't change that day (43.02 either way), but a large move could be missed during those weeks. Month-aligned windows would fix it. It's a small change, but it's a scoring change, so it needs a recorded before/after.
 - **Automate or drop the manual indicators?** `household_debt_gdp` (weight 25) and `mortgage_stress_rate` (weight 15) have no feed, which is 40 of the 135 points. `household_debt_gdp` was last updated for December 2025. These are the main thing left that isn't automatic. Dropping them is a scoring change, so it needs a recorded before/after score.
-
-### Why the flags might be replaced
-
-The flags currently add nothing to the score. The raw total is −3.4 and the cap is −2, so no change to any flag moves the score until the total rises past −2. That's a lot of machinery for a constant: 19 flags, a change log, a trigger, a limit and a retire rule, kept in sync across three places.
-
-A simpler version: each video gives one number from −2 to +2 with a short reason, and the score uses the average of the last few videos. The summaries and the price ladder stay. The per-flag breakdown on `/btc` goes. It's a change to how the signal works, so it's Lincoln's decision.
 
 ## Related notes
 

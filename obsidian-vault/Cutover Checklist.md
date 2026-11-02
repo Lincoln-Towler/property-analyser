@@ -9,15 +9,15 @@ The move from Streamlit to the Next.js site. Only the last steps are left. Backg
 - [x] Applied the migrations, up to `0015`
 - [x] Switched n8n to upsert
 - [x] Deployed to Vercel, with the daily score snapshot running since 14 July
-- [x] Parallel run, which is over: merging the close-out PR moves the Streamlit code to `legacy/`, so the old app stops working
+- [x] Parallel run, which is over. The Streamlit code moved to `legacy/` on 2 Nov, so the old app should no longer start
 
-## Left to do (about 5 minutes)
+## Left to do
 
 Claude can't do these, because they need your logins and a new password.
 
 ### 1. Rotate the database password
 
-The old password is stored in Streamlit Cloud's secrets, so it should be treated as exposed. Nothing that's running uses it: n8n and Vercel use API keys, which this doesn't change.
+The old password is stored in Streamlit Cloud's secrets, so it should be treated as exposed. Nothing that's running uses it: n8n and Vercel use API keys, which this doesn't change. (The 3 Nov BTC brief showed up in the logs as an API call from n8n.)
 
 - [ ] Open [Supabase](https://supabase.com/dashboard) → project `property-analyzer` → **Project Settings** → **Database**
 - [ ] Click **Reset database password**, then **Generate a password**, and save it in your password manager
@@ -25,12 +25,16 @@ The old password is stored in Streamlit Cloud's secrets, so it should be treated
 
 ### 2. Delete the Streamlit app
 
+Streamlit is dropped (Lincoln's decision, 3 Nov). It's already stopped, because its code moved to `legacy/`, so this only clears away a dead error page and the old secret.
+
 - [ ] Open [share.streamlit.io](https://share.streamlit.io) and sign in
-- [ ] Find `property-analyser`, click **⋮**, then **Delete**. This also removes the old secrets
+- [ ] Find `property-analyser`, click **⋮**, then **Delete**
+
+**Don't bring it back as it was.** The page has no login, and its Data Management tab can add, edit and delete production data using the owner password. That's the access the site was locked down to remove.
 
 ### 3. Optional: drop the seven empty tables
 
-These tables have never held a row, so they're harmless clutter. Do this after step 2, because the old app recreates them if it's opened.
+These tables have never held a row, so they're harmless clutter. The old app used to recreate them on load, but it no longer runs.
 
 - [ ] In Supabase, open **SQL Editor**, paste `supabase/migrations/0016_drop_empty_legacy_tables.sql` and click **Run**. It refuses to run if any of them has data
 
