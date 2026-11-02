@@ -1,5 +1,7 @@
 # Economic Indicators Integration
 
+> **Partly historical.** The Data Management tab went with Streamlit. Manual entries now go in through the Supabase table editor, and the site reads the same combined view. See [[Property Analyser - Architecture]].
+
 ## Two-Table Architecture
 
 Economic indicator data comes from two sources:

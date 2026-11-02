@@ -1,5 +1,7 @@
 # Rebuild Proposal — Streamlit → Own Website
 
+> **Historical.** The rebuild shipped as a Next.js site. [[Property Analyser - Architecture]] describes what's running now.
+
 *June 2026. Full review of the codebase + live Supabase database, three candidate architectures designed independently and scored by a three-judge panel (maintainability / pragmatism / product lenses).*
 
 ## What the review found

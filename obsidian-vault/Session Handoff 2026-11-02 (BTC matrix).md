@@ -1,5 +1,7 @@
 # Session Handoff — 2 Nov 2026 (BTC scoring matrix)
 
+> **Done.** Everything below was applied or decided on 2 Nov. See [[Handoff 2026-11-02 (close-out)]]. Kept as a record.
+
 **For:** a local Claude Code instance on Lincoln's computer, picking up from a cloud session.
 **Read first:** `CLAUDE.md` (rules and architecture), then [[Data Pipelines Handoff 2026-11-02]] (how the n8n feeds and the BTC approval loop work).
 

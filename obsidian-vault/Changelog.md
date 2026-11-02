@@ -10,6 +10,15 @@
 - **BTC:** `btc_video_analysis` and `btc_flag_suggestions` tables with approve-to-apply, supersede and 20-flag-limit triggers; `get_btc_signal` caps the flags' combined effect at ±2 (migrations `0008`–`0010`). First review cycle: 11 suggestions applied, 8 rejected.
 - **Repo:** workflow source, tests and importable JSON committed under `n8n/`; `CLAUDE.md` added for future Claude sessions.
 
+### Close-out (2 Nov, see [[Handoff 2026-11-02 (close-out)]])
+- **No more approvals:** BTC flag changes apply as soon as the workflow saves them (migration `0014`). `btc_flag_suggestions` stays as the log. When 20 flags are active, the stalest retires to make room.
+- **Website can't change anything:** the public key and signed-up users lost every write permission (migration `0015`). Tested by attempting writes with the public key; all were refused. The `/admin` and approval-screen plans are dropped.
+- **BTC flags 36 → 19:** applied the 13 waiting suggestions and retired 12 duplicates or stale flags (`0012`). The raw total went from −6.7 to −3.4, which still caps at −2, so scores didn't move.
+- **Price bands 16 → 14 (`0013`):** a price below every band now gets the deepest band's score instead of reading SELL; the $38K and $39K rows merged; $57K and $42K put in order; three labels refreshed.
+- **Site:** `/btc` shows Cowen summaries and recent flag changes; `/audit` has an automation health panel; Locations calls its price an asking price and shows older readings' dates.
+- **Legacy rows stay:** the plan to delete odd `property_data` rows was dropped, as it contradicted the rule against deleting anomalies.
+- **Repo:** Streamlit and its files moved to `legacy/`, which stops the old deployed app; missing migration records added; docs brought up to date.
+
 ### Site UI rework (PR #26)
 - Mobile nav no longer scrolls the page sideways; active page highlighted.
 - Charts use real time axes, straight or stepped lines, shaded target zones and correctly labelled warning lines.

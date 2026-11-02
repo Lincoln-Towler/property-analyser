@@ -9,7 +9,7 @@ Lincoln's personal Australian property-market analyser, plus a separate Bitcoin 
 - **Live site:** `web/` (Next.js on Vercel, https://property-analyser-three.vercel.app). The site is public.
 - **Data:** the Supabase project `property-analyzer` (ref `uorrpukzqwyvzbewgudk`, ap-southeast-2).
 - **Feeds:** n8n workflows on Lincoln's self-hosted n8n (TrueNAS, behind Cloudflare Access). Cloud sessions can't reach it, so workflow changes are delivered as JSON files for him to import.
-- **Legacy:** `property_analysis_dashboard.py` (Streamlit). This is the reference implementation the web scoring engine is parity-tested against. Don't change scoring in it.
+- **Legacy:** `legacy/` holds the retired Streamlit app (`property_analysis_dashboard.py`). It's no longer deployed, but it's still the reference the web scoring engine is parity-tested against. Don't change scoring in it.
 - **Notes:** `obsidian-vault/` holds Lincoln's notes: architecture, `Changelog.md`, dated handoff notes and the cutover checklist. Add a changelog entry for notable changes.
 - **In-flight work:** read the newest `obsidian-vault/*Handoff*.md` before starting. It records decisions waiting on Lincoln that aren't visible in the code.
 
@@ -52,7 +52,7 @@ Nothing is live until the merge. If he says "I can't see X", check `git log orig
 
 ## Architecture
 
-**Data flows** from n8n into Supabase, and the site reads it. Writes use the service role: the "Supabase account" credential in n8n, and `SUPABASE_SERVICE_ROLE_KEY` in Vercel, which is used by `/api/snapshot` and the server-side BTC reads. With RLS on, `anon` is read-only.
+**Data flows** from n8n into Supabase, and the site reads it. Writes use the service role: the "Supabase account" credential in n8n, and `SUPABASE_SERVICE_ROLE_KEY` in Vercel, which is used by `/api/snapshot` and the server-side BTC reads. `anon` and `authenticated` can only read: RLS blocks their writes, and migration `0015` removed the write permissions as well.
 
 **Economic indicators**
 - n8n upserts into `economic_indicators_history` (`on_conflict=date,indicator_name`).
@@ -80,18 +80,22 @@ Nothing is live until the merge. If he says "I can't see X", check `git log orig
 **BTC signal** (separate from the property score)
 - `btc_key_levels` holds the price bands, each with a `base_score`.
 - `btc_context_flags` holds the flags: `score_modifier` ±0.5 each, `is_active`.
-- `get_btc_signal(price)` = base score of the highest band ≤ price, plus the sum of active modifiers **capped at ±2**, clamped to 1–10. It logs to `btc_signal_log`. Lincoln's separate BTC brief workflow calls it daily.
-- **Cowen workflow:** writes paraphrased video summaries to `btc_video_analysis` and proposed flag changes to `btc_flag_suggestions`. Setting a suggestion's `status` to `approved` fires a trigger that applies it.
-- **Limits:** a hard maximum of 20 active flags, and only one pending suggestion per flag (`supersede_older` trigger).
-- **The `/btc` page** reads these tables server-side with the service role (`lib/btc.ts`). Pure view logic lives in `lib/btc-view.ts`.
+- `get_btc_signal(price)` = base score of the highest band ≤ price (below every band, the deepest band's score), plus the sum of active modifiers **capped at ±2**, clamped to 1–10. It logs to `btc_signal_log`. Lincoln's separate BTC brief workflow calls it daily. Only the service role may call it.
+- **Cowen workflow:** writes paraphrased video summaries to `btc_video_analysis` and flag changes to `btc_flag_suggestions`. Saving a row applies it straight away (trigger `apply_on_insert`), and the table stays as the log of what changed and why.
+- **Limits:** ±0.5 per flag and a maximum of 20 active flags. When the list is full, the flag that's gone longest without a refresh retires to make room, so it can't jam.
+- **The `/btc` page** reads these tables server-side with the service role (`lib/btc.ts`), including the latest video summaries and flag changes. Pure view logic lives in `lib/btc-view.ts`.
+
+**Automation health**
+- `lib/feed-health.ts` powers the panel at the top of `/audit`. Nobody checks the feeds by hand, and they once died unnoticed for months, so the site has to say when one stops.
 
 ## Rules
 
 - **Production database changes:** back up first and get Lincoln's OK. Record each change as the next numbered file in `supabase/migrations/`. Some migrations were applied through the Supabase dashboard or MCP and committed afterwards as records. Their headers say "ALREADY APPLIED", so check `list_migrations` before running anything.
-- **Never edit `btc_context_flags` directly.** Insert `pending` rows into `btc_flag_suggestions` (`video_id` may be NULL, with a `reason`) and let Lincoln approve them.
+- **No approval steps, and nothing writable on the website.** Lincoln's decision, November 2026. BTC flag changes apply automatically, and the public site stays read-only: no login, admin page, approval screen or public write route. The only writers are the service-role automations. Don't propose adding one back.
+- **Change BTC flags through the log.** To change a flag by hand, insert a row into `btc_flag_suggestions` (`video_id` NULL, with a `reason`). It applies straight away and leaves a record. Don't edit `btc_context_flags` directly.
 - **Keep these in sync** when one changes (only with Lincoln's agreement):
   - **Flag cap ±2:** `get_btc_signal`, `BTC_MODIFIER_CAP` in `web/src/lib/btc-view.ts`, and `n8n/src/code/btc_build_request.js`.
-  - **20-flag limit:** `apply_btc_flag_suggestion` and `btc_build_request.js`.
+  - **20-flag limit:** `apply_btc_flag_suggestion`, `btc_build_request.js` and `BTC_MAX_ACTIVE_FLAGS` in `btc-view.ts`.
   - **BTC signal thresholds:** `get_btc_signal` and `btcSignalForScore` in `btc-view.ts`.
   - **Market-score bands:** `signalForScore` in `engine.ts` and `SIGNAL_BANDS` in `lib/theme.ts` (pinned by `tests/ui.test.ts`).
 - **The repo is public.** Credentials live in n8n and Vercel only. n8n credential blocks in the workflow JSON hold only an internal ID and name, which is fine to commit.
@@ -131,4 +135,7 @@ Published figures differ by methodology: Australian household debt-to-GDP spans 
 
 - **Manual indicators weigh heavily and go stale.** `household_debt_gdp` has the second-highest weight and no feed; its latest reading is December 2025. Its last two rows are labelled "BIS via Trading Economics" and the first "ABS". The levels fit the 113.x family, but the labels break the one-source rule above. `/audit` shows the weight riding on frozen data.
 - **Quarterly indicators can never trend or register volatility.** The engine needs 2 readings in 3 months and 3 in 6 months; a quarterly cadence supplies 1 and 2. Backfilling can't fix this; only frequency-aware windows would, which is a scoring change. Pinned by a test in `window-context.test.ts`.
+- **Monthly series drop out of the trend window for part of each month.** They're dated the first of the month, so on the 2nd the reading from three months ago falls outside the 3-month window, and it stays out until the next release arrives. On 2 Nov that took the "can't trend" share on `/audit` from 22% to 70%. The score didn't move that day (43.02 either way), but a large move could be missed during those weeks. Month-aligned windows would fix it, which is a scoring change.
+- **Location scores now use asking-price growth.** The thresholds (growth above 10% and so on) were set for sold prices, and asking prices move more smoothly. They haven't been retuned.
+- **Days on market is manual and can go stale.** The latest reading is August 2026, and it still counts toward the location score. `sales_volume` is also manual, but it's display-only.
 - **The two-point trend rule is blind on weekly series.** Auction clearance fell 17% over six readings and scored "stable". `getWindowContext` surfaces the contradiction without changing the score.

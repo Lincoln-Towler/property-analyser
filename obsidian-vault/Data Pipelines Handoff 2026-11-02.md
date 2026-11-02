@@ -1,5 +1,7 @@
 # Data Pipelines Handoff — 2 Nov 2026
 
+> **Partly out of date.** [[Handoff 2026-11-02 (close-out)]] is the current state: approvals are gone, the flags and price bands are fixed, and the task list in §5 has been worked through. The system map, data definitions and n8n lessons below are still right.
+
 **For:** Claude Code working in `Lincoln-Towler/property-analyser`
 **From:** a Claude session (2 Nov 2026) that fixed the n8n data feeds, cleaned the Supabase data, replaced Hotspotting with a free location-data feed, and added an AI review loop for the BTC score.
 

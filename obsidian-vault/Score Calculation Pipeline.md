@@ -1,5 +1,7 @@
 # Score Calculation Pipeline
 
+> The engine now lives in `web/src/lib/scoring/`, a tested port of the Python in `legacy/`. The maths below still applies.
+
 The market score flows through three phases: **v2 (base)** -> **v3 (volatility + confidence)**.
 
 ## Pipeline Flow

@@ -1,63 +1,45 @@
-# Cutover Checklist — Lincoln's Steps
+# Cutover Checklist
 
-Plain-English steps to take the new Next.js site live. ~45 minutes of active work. Full technical detail lives in `web/README.md`; the background is in [[Rebuild Proposal]].
+The move from Streamlit to the Next.js site. Only the last steps are left. Background is in [[Rebuild Proposal]].
 
-## 1. Check what credential n8n uses ⚠️ do first (5 min)
-- [ ] Open the n8n workflow that writes indicator data
-- [ ] Open the DB node and look at its credential:
-  - **Connection string / host+password** (`db.uorrpukzqwyvzbewgudk.supabase.co`, user `postgres`) → it uses the database password. **Do not rotate the password until this is changed** — flag it before cutover.
-  - **Supabase API credential with a `service_role` key** → safe, nothing we do affects it.
+## Done
 
-## 2. Backup (10 min)
-Supabase free tier has NO automatic backups.
-- [ ] Supabase Dashboard → Table Editor → Export as CSV for: `economic_indicators`, `economic_indicators_history`, `property_data`, `btc_key_levels`, `btc_context_flags`, `btc_signal_log`
-- [ ] Save the files somewhere safe
+- [x] Checked what credential n8n uses: a Supabase API credential (service role), not the database password
+- [x] Backed up the data
+- [x] Applied the migrations, up to `0015`
+- [x] Switched n8n to upsert
+- [x] Deployed to Vercel, with the daily score snapshot running since 14 July
+- [x] Parallel run, which is over: merging the close-out PR moves the Streamlit code to `legacy/`, so the old app stops working
 
-## 3. Apply migrations (10 min)
-- [ ] Merge the rebuild branch on GitHub (usual PR flow)
-- [ ] Supabase Dashboard → SQL Editor → paste & Run, in order:
-  - [ ] `supabase/migrations/0001_history_dedupe_and_constraints.sql`
-  - [ ] `supabase/migrations/0002_combined_view_security_invoker.sql`
-  - [ ] `supabase/migrations/0003_market_score_history.sql`
-  - [ ] `0004_enable_rls.sql` — **only after step 1**; if n8n uses the anon key, stop and flag it
-- [ ] Optional sanity check: Supabase Dashboard → Advisors → Security — the RLS errors should be gone after 0004
+## Left to do (about 5 minutes)
 
-## 4. Switch n8n to upsert (5 min)
-- [ ] Change the insert node's SQL to:
-```sql
-INSERT INTO economic_indicators_history (date, indicator_name, value)
-VALUES (...)
-ON CONFLICT (date, indicator_name) DO UPDATE SET value = EXCLUDED.value;
-```
-- [ ] If the node uses the point-and-click Insert operation, switch it to "Execute Query"
+Claude can't do these, because they need your logins and a new password.
 
-## 5. Deploy to Vercel (15 min)
-- [ ] vercel.com → log in with GitHub → Add New → Project → import `Lincoln-Towler/property-analyser`
-- [ ] Set **Root Directory** = `web`
-- [ ] Add 4 environment variables:
+### 1. Rotate the database password
 
-| Name | Value |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://uorrpukzqwyvzbewgudk.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Project Settings → API Keys → `anon` / publishable |
-| `SUPABASE_SERVICE_ROLE_KEY` | same page → `service_role` secret |
-| `CRON_SECRET` | any long random string |
+The old password is stored in Streamlit Cloud's secrets, so it should be treated as exposed. Nothing that's running uses it: n8n and Vercel use API keys, which this doesn't change.
 
-- [ ] Deploy, then check `/`, `/indicators`, `/cycle`, `/audit` load with real data
+- [ ] Open [Supabase](https://supabase.com/dashboard) → project `property-analyzer` → **Project Settings** → **Database**
+- [ ] Click **Reset database password**, then **Generate a password**, and save it in your password manager
+- [ ] The next morning, check that `/audit` still says everything ran on schedule
 
-## 6. Parallel run (1–2 weeks, passive)
-- [ ] Keep Streamlit running; compare its score against the new site every few days — they should match exactly
-- [ ] The daily cron (21:00 UTC) starts building the score-history chart automatically
+### 2. Delete the Streamlit app
 
-## 7. Cutover (with Claude)
-- [ ] Rotate the database password (ONLY once n8n's credential from step 1 is known/updated)
-- [ ] Delete the Streamlit Cloud deployment
-- [ ] Optionally drop the empty legacy tables
+- [ ] Open [share.streamlit.io](https://share.streamlit.io) and sign in
+- [ ] Find `property-analyser`, click **⋮**, then **Delete**. This also removes the old secrets
 
-## In the meantime
-- **Monthly data entry** (until the `/admin` page is built): Supabase Dashboard → Table Editor → `economic_indicators` → Insert row. Use exact snake_case names (`mortgage_stress_rate`) — typos are now rejected by the database.
-- **Force a score snapshot / fresh data now**: redeploy on Vercel, or wait for the hourly refresh.
+### 3. Optional: drop the seven empty tables
 
-## Related Notes
+These tables have never held a row, so they're harmless clutter. Do this after step 2, because the old app recreates them if it's opened.
+
+- [ ] In Supabase, open **SQL Editor**, paste `supabase/migrations/0016_drop_empty_legacy_tables.sql` and click **Run**. It refuses to run if any of them has data
+
+## Entering data by hand
+
+The site has no admin page, by decision. For the few values that are still manual (household debt, mortgage stress, days on market, sales volume), use Supabase → **Table Editor** → insert a row. Use the exact snake_case names (such as `mortgage_stress_rate`); typos are rejected by the database.
+
+## Related notes
+
+- [[Handoff 2026-11-02 (close-out)]]
 - [[Rebuild Proposal]]
 - [[Changelog]]
