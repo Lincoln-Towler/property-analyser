@@ -22,7 +22,7 @@ These are the limits on a change nobody reviews:
 - Only the official channel ID is read, and the transcript is passed to Claude as data, not instructions.
 - Every change is logged with a reason and shown on `/btc`.
 
-**Worst case:** a badly misread video could still swing the score by up to 4 points (from −2 to +2 from flags), until the next video corrects it. The price band sets the rest, and no workflow can change the bands.
+**Worst case:** a badly misread run could still swing the score by up to 4 points (from −2 to +2 from flags), until a later video corrects it. One video alone can't go that far, because it's limited to 8 changes. The price band sets the rest, and no workflow can change the bands.
 
 ## What's left for Lincoln
 
