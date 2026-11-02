@@ -44,9 +44,7 @@ nodes = [
     supabase("Get current flags", [-20, y1],
              "btc_context_flags?select=flag_key,flag_label,category,current_value,score_modifier,is_active,updated_at&order=category.asc,flag_key.asc",
              executeOnce=True),
-    supabase("Get pending suggestions", [200, y1], "btc_flag_suggestions?status=eq.pending&select=flag_key,action,video_id",
-             executeOnce=True, alwaysOutputData=True),
-    code_node("Keep new videos", [420, y1], "btc_keep_new.js"),
+    code_node("Keep new videos", [200, y1], "btc_keep_new.js"),
     # --- second row: per-video work ---
     http("Get transcript (Supadata)", [-680, y2], "https://api.supadata.ai/v1/transcript",
          extra={"authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
@@ -63,16 +61,17 @@ nodes = [
     code_node("Prepare rows", [-20, y2], "btc_prepare_rows.js"),
     supabase("Save videos", [200, y2], "btc_video_analysis?on_conflict=video_id", method="POST",
              body_expr="={{ JSON.stringify($json.videos) }}", prefer="resolution=merge-duplicates,return=minimal"),
-    code_node("Suggestions to save", [420, y2], "btc_suggestions_to_save.js"),
-    supabase("Save suggestions", [640, y2], "btc_flag_suggestions", method="POST",
+    code_node("Changes to save", [420, y2], "btc_suggestions_to_save.js"),
+    supabase("Save flag changes", [640, y2], "btc_flag_suggestions", method="POST",
              body_expr="={{ JSON.stringify($json.rows) }}", prefer="return=minimal"),
     {"parameters": {"content":
-        "## Cowen videos → BTC flag suggestions\n"
+        "## Cowen videos → BTC flags\n"
         "Every morning: finds new Benjamin Cowen videos (official channel only, no Shorts), gets the transcript from Supadata, "
         "and asks Claude Sonnet which `btc_context_flags` to **update, retire or add**.\n\n"
-        "Nothing changes your score until you approve it: in Supabase open **btc_flag_suggestions** and set `status` to "
-        "**approved** (applies it) or **rejected**. Only the newest suggestion per flag stays pending.\n\n"
-        "Score rules (in Supabase): flags move the score at most ±2 points; max 20 active flags.\n\n"
+        "Changes apply automatically as they're saved; there's no approval step. **btc_flag_suggestions** is the log of what "
+        "changed and why.\n\n"
+        "Score rules (in Supabase): each flag ±0.5; flags together move the score at most ±2 points; max 20 active flags "
+        "(when full, the stalest retires to make room).\n\n"
         "Max 3 videos per run. A video that fails is retried up to 3 days.",
         "height": 300, "width": 520, "color": 4},
      "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-1460, 120], "id": nid(), "name": "About this workflow"},
@@ -86,8 +85,8 @@ transcript = next(n for n in nodes if n["name"] == "Get transcript (Supadata)")[
 transcript.update({"timeout": 120000, "batching": {"batch": {"batchSize": 1, "batchInterval": 3000}}})
 
 chain = ["Every day 8:30am", "Get Cowen's YouTube feed", "Parse feed", "Get analysed videos", "Get current flags",
-         "Get pending suggestions", "Keep new videos", "Get transcript (Supadata)", "Build Claude request", "Ask Claude", "Prepare rows",
-         "Save videos", "Suggestions to save", "Save suggestions"]
+         "Keep new videos", "Get transcript (Supadata)", "Build Claude request", "Ask Claude", "Prepare rows",
+         "Save videos", "Changes to save", "Save flag changes"]
 connections = {a: {"main": [[{"node": b, "type": "main", "index": 0}]]} for a, b in zip(chain, chain[1:])}
 
 workflow = {"name": "Cowen Videos → BTC Flag Suggestions", "nodes": nodes, "connections": connections,

@@ -30,6 +30,12 @@ Don't hand-edit the JSON in `workflows/`. It's generated.
 4. Lincoln imports it in n8n: open the workflow, select all and delete, then
    **… → Import from File…**, re-select credentials if prompted, then **Save**.
 
+## BTC flag changes apply automatically
+
+There's no approval step. *Save flag changes* inserts rows into `btc_flag_suggestions`, and a database trigger applies each one as it's saved, so that table is now the log of what changed and why. Supabase enforces the limits: ±0.5 per flag, ±2 on the score overall, and at most 20 active flags (when full, the stalest retires).
+
+The trigger works with any copy of this workflow, so re-importing after a prompt change is tidy-up rather than a fix.
+
 ## Credentials (in n8n only, never in this repo)
 
 - **Supabase account**: Supabase API credential (service role). Used by every Supabase step and links automatically on import.

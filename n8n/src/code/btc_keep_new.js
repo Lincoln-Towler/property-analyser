@@ -1,5 +1,5 @@
 // Picks videos that still need analysing (max 3 per run, oldest first) and attaches the
-// current flags and the suggestions already waiting for review, so Claude can see both.
+// current flags, so Claude can see them.
 // Failed videos are retried up to 3 times.
 const videos = $('Parse feed').first().json.videos;
 const seen = new Map($('Get analysed videos').all()
@@ -10,9 +10,6 @@ const seen = new Map($('Get analysed videos').all()
 const flags = $('Get current flags').all().map(i => i.json).filter(f => f.flag_key);
 if (!flags.length) throw new Error('Could not load btc_context_flags');
 
-const pending = $input.all().map(i => i.json).filter(s => s.flag_key)
-  .map(s => ({ flag_key: s.flag_key, action: s.action }));
-
 const todo = videos
   .filter(v => {
     const prev = seen.get(v.video_id);
@@ -20,6 +17,6 @@ const todo = videos
   })
   .sort((a, b) => a.published_at.localeCompare(b.published_at))
   .slice(0, 3)
-  .map(v => ({ json: { ...v, attempts: ((seen.get(v.video_id) || {}).attempts || 0) + 1, flags, pending } }));
+  .map(v => ({ json: { ...v, attempts: ((seen.get(v.video_id) || {}).attempts || 0) + 1, flags } }));
 
 return todo; // nothing new -> the workflow stops here quietly

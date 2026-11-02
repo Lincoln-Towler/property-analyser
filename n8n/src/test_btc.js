@@ -33,14 +33,13 @@ const ago = h => new Date(Date.now() - h * 3600000).toISOString().replace('.000Z
   ];
   const analysed = [{ json: { video_id: 'VID_C', status: 'analysed', attempts: 1 } }, { json: { video_id: 'VID_B', status: 'failed', attempts: 1 } }];
   const flagItems = flags.map(f => ({ json: f }));
-  const pendingItems = [{ json: { flag_key: 'rate_hike_repricing_risk', action: 'update', video_id: 'X' } }];
-  const keep = await runNode('btc_keep_new.js', pendingItems, { 'Parse feed': [{ json: { videos: feed } }], 'Get analysed videos': analysed, 'Get current flags': flagItems });
+  const keep = await runNode('btc_keep_new.js', [{ json: {} }], { 'Parse feed': [{ json: { videos: feed } }], 'Get analysed videos': analysed, 'Get current flags': flagItems });
   check('keep: skips analysed, retries failed, oldest first', JSON.stringify(keep.map(k => k.json.video_id)) === '["VID_B","VID_A"]', JSON.stringify(keep.map(k => k.json.video_id)));
   check('keep: counts attempts', keep[0].json.attempts === 2 && keep[1].json.attempts === 1);
   const keep3 = await runNode('btc_keep_new.js', [{ json: {} }], { 'Parse feed': [{ json: { videos: feed } }], 'Get analysed videos': [{ json: { video_id: 'VID_B', status: 'failed', attempts: 3 } }], 'Get current flags': flagItems });
   check('keep: gives up after 3 failed attempts', !keep3.some(k => k.json.video_id === 'VID_B'));
   const none = await runNode('btc_keep_new.js', [{ json: {} }], { 'Parse feed': [{ json: { videos: [] } }], 'Get analysed videos': [{ json: {} }], 'Get current flags': flagItems });
-  check('keep: attaches pending suggestions (empty input = none)', keep[0].json.pending.length === 1 && keep3[0].json.pending.length === 0);
+  check('keep: attaches the current flags', keep[0].json.flags.length === 3 && keep[0].json.pending === undefined);
   check('keep: nothing new -> stops quietly', Array.isArray(none) && none.length === 0);
 
   // ---------- Build Claude request ----------
@@ -49,7 +48,8 @@ const ago = h => new Date(Date.now() - h * 3600000).toISOString().replace('.000Z
   const body = built[0].json.body;
   check('build: Sonnet 5.5 with JSON schema output', body.model === 'claude-sonnet-5-5' && body.output_config.format.type === 'json_schema' && body.output_config.format.schema.additionalProperties === false);
   check('build: lists flags and the active total', /golden_cross_bull \[CYCLE\] ACTIVE/.test(body.messages[0].content) && /2 active of max 20; active modifiers total -0\.1/.test(body.messages[0].content), body.messages[0].content.slice(0, 300));
-  check('build: prompt states the cap, limit and pending list', /2 active of max 20/.test(body.messages[0].content) && /waiting for review:\n- update rate_hike_repricing_risk/.test(body.messages[0].content) && /hard limit of 20 active flags/.test(body.system), body.messages[0].content.slice(0, 400));
+  check('build: prompt states the cap and limit', /2 active of max 20/.test(body.messages[0].content) && /hard limit of 20 active flags/.test(body.system), body.messages[0].content.slice(0, 400));
+  check('build: prompt says changes apply with no review, and nothing is left waiting', /apply automatically with no human review/.test(body.system) && !/waiting for review/.test(body.system + body.messages[0].content));
   check('build: transcript wrapped as data', /<transcript>\nBitcoin is trading/.test(body.messages[0].content));
   check('build: missing transcript becomes an error, not a request', !built[1].json.body && /No transcript/.test(built[1].json.error));
   const axios429 = { json: { error: { message: "Try spacing your requests out using the batching settings under 'Options'", name: 'AxiosError', stack: 'AxiosError: Request failed with status code 429\n    at settle (...)' } } };
@@ -76,6 +76,7 @@ const ago = h => new Date(Date.now() - h * 3600000).toISOString().replace('.000Z
   check('prepare: retire keeps is_active false, no modifier', sug.some(s => s.action === 'retire' && s.flag_key === 'june_fed_boj_catalyst' && s.is_active === false && s.score_modifier === null));
   check('prepare: modifier rounded to 0.1 and capped at ±0.5', sug.find(s => s.flag_key === 'golden_cross_bull' && s.action === 'update').score_modifier === 0.1 && sug.find(s => s.flag_key === 'q4_dump_underway').score_modifier === -0.5, JSON.stringify(sug));
   check('prepare: new flag key cleaned to snake_case', sug.some(s => s.action === 'add' && s.flag_key === 'q4_dump_underway'));
+  check('prepare: retires are saved first, adds last', sug[0].action === 'retire' && sug[sug.length - 1].action === 'add', JSON.stringify(sug.map(s => s.action)));
   check('prepare: "add" of an existing flag becomes "update"', sug.filter(s => s.flag_key === 'golden_cross_bull').every(s => s.action === 'update'));
   check('prepare: unknown and already-retired flags dropped', !sug.some(s => s.flag_key === 'made_up_flag' || s.flag_key === 'old_inactive'));
   check('prepare: transcript failure recorded as failed (attempt counted)', prepared.videos[1].status === 'failed' && /No transcript/.test(prepared.videos[1].error) && prepared.videos[1].attempts === 1);

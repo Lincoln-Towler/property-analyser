@@ -64,4 +64,8 @@ $input.all().forEach((item, i) => {
 const newest = new Map();
 for (const s of suggestions) newest.set(s.flag_key, s);
 
-return [{ json: { videos, suggestions: [...newest.values()] } }];
+// Rows apply in the order they're saved, so retire first: that frees room before anything is added.
+const order = { retire: 0, update: 1, add: 2 };
+const ordered = [...newest.values()].sort((a, b) => order[a.action] - order[b.action]);
+
+return [{ json: { videos, suggestions: ordered } }];
