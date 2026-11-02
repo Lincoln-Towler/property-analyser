@@ -65,6 +65,5 @@ Should key levels also come from the Cowen workflow, as suggestions he approves 
 - **Remaining tasks from [[Data Pipelines Handoff 2026-11-02]] §5:**
   - Show Cowen video summaries on `/btc`.
   - Relabel Locations "median price" as an asking price.
-  - Clean the legacy `property_data` rows.
   - Add monitoring to `/audit`.
   - Drop the 2 Nov backup tables once confirmed.

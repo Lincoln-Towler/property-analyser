@@ -77,7 +77,7 @@
 | `median_price` | SQM workflow, weekly | ⚠️ **13-week average ASKING price, 3-bed houses. Not a sold median.** |
 | `days_on_market`, `sales_volume` | **Manual (Lincoln's decision)** | There's no free source. Latest entries are Aug and Feb 2026. |
 
-SQM rows have a `source` starting with `SQM`. **Known bad legacy rows** from the Feb 2026 CSV imports, not yet cleaned: Sydney vacancy 19.83, Brisbane `annual_growth` −30.93 and vacancy 7.69, Port Adelaide vacancy 3.33, Perth vacancy 3.15, Albany/Tamworth vacancy 0.
+SQM rows have a `source` starting with `SQM`. **Odd-looking legacy rows** from Feb 2026, which stay in the table: Sydney vacancy 19.83, Brisbane `annual_growth` −30.93 and vacancy 7.69, Port Adelaide vacancy 3.33, Perth vacancy 3.15, Albany/Tamworth vacancy 0. An August 2026 review already rejected deleting these, and zero readings count as real values (see the rules in `CLAUDE.md`). Newer SQM rows now supersede them, and `/audit` flags them.
 
 ### 2.3 BTC score
 
@@ -164,7 +164,7 @@ Locations → fetch 33 SQM pages (11 locations × vacancy, asking rents, asking 
 
 5. **Get BTC active flags under 20.** Draft a retire list (stale items, and duplicates of the same thesis, e.g. several flags encoding "Q4 low after the midterms") and present it to Lincoln. On his OK, insert them as `pending` rows in `btc_flag_suggestions` (`video_id` can be NULL, with reason "manual cleanup") so he approves them the normal way.
 
-6. **Clean the legacy `property_data` rows** listed in §2.2. Back up first (`create table property_data_backup_YYYYMMDD as table property_data`), then propose the deletions to Lincoln.
+6. ~~Clean the legacy `property_data` rows.~~ **Not doing this.** It contradicted the standing rule against deleting anomalies. They stay, flagged on `/audit`.
 
 7. **Monitoring.** Extend `/audit` to flag feeds older than 2× their `expected_frequency` (already in `web/src/lib/scoring/config.ts`), SQM location freshness, and `btc_video_analysis` rows with `status = 'failed'`. Lincoln could also add an n8n Error Trigger workflow that emails on failure.
 
