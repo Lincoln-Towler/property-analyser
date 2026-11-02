@@ -1,5 +1,21 @@
 # Changelog
 
+## November 2026 - Data pipelines, BTC review loop, UI rework
+
+### Data pipelines (2 Nov, see [[Data Pipelines Handoff 2026-11-02]])
+- **Diagnosis:** only the cash rate was still updating. The credit branch requested an RBA page that usually isn't published yet, and its 404 stopped every later branch. Several parsers and URLs were outdated, and the cash-rate "Update row" node was overwriting the unemployment row.
+- **Economic Indicators workflow fixed:** new ABS API host, correct series (seasonally adjusted unemployment, housing credit), cash-rate parser, credit-page fallback, isolated failures, range checks; "Update row" nodes removed.
+- **Data backfilled and cleaned** after a full backup (migration `0007`): ~45 sourced rows, official figures aligned, every series dated first-of-period with one point per period.
+- **Location data:** new SQM workflow replaces Hotspotting for vacancy, yield, growth and asking price on all 11 locations.
+- **BTC:** `btc_video_analysis` and `btc_flag_suggestions` tables with approve-to-apply, supersede and 20-flag-limit triggers; `get_btc_signal` caps the flags' combined effect at ±2 (migrations `0008`–`0010`). First review cycle: 11 suggestions applied, 8 rejected.
+- **Repo:** workflow source, tests and importable JSON committed under `n8n/`; `CLAUDE.md` added for future Claude sessions.
+
+### Site UI rework (PR #26)
+- Mobile nav no longer scrolls the page sideways; active page highlighted.
+- Charts use real time axes, straight or stepped lines, shaded target zones and correctly labelled warning lines.
+- Dashboard: gauge marker, zoned score history, coloured pillars, tile sparklines, commentary columns. Indicators grouped by pillar.
+- BTC page: price against key levels, price ladder, flags grouped by category. Locations, Audit and Cycle tidied; contradictory cycle advice fixed.
+
 ## June/July 2026 - Rebuild Phase 1 (Next.js)
 
 ### Rebuild kickoff — engine port + public site

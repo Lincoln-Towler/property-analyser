@@ -1,0 +1,1352 @@
+{
+  "name": "Economic Indicators",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1072,
+        672
+      ],
+      "id": "0f664fd8-565c-41b3-b37e-b40703d95c3d",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json.data;\n\n// Find the first row in the tbody which is the most recent rate\nconst match = html.match(/<td>(\\d+\\.\\d+)<\\/td>/);\nconst rate = match ? parseFloat(match[1]) : null;\n\nreturn [{\n  json: {\n    value: rate,\n    date: new Date().toISOString().split('T')[0]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        0
+      ],
+      "id": "1cd2b7aa-a56b-4d4d-a7e9-9ade6321fec4",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "economic_indicators",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "value",
+              "condition": "eq",
+              "keyValue": "={{ $json.value }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "value",
+              "fieldValue": "={{ $json.value }}"
+            },
+            {
+              "fieldId": "date",
+              "fieldValue": "={{ $json.date }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        -128
+      ],
+      "id": "c73e44ad-c41d-463d-aedc-ac783a58005a",
+      "name": "Update a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\n\n// Go back one month\nconst d = new Date(now.getFullYear(), now.getMonth() - 1, 1);\n\nconst month = String(d.getMonth() + 1).padStart(2, '0');\nconst year = String(d.getFullYear()).slice(-2);\nconst fullYear = d.getFullYear();\n\nconst url = `https://www.rba.gov.au/statistics/frequency/fin-agg/${fullYear}/fin-agg-${month}${year}.html`;\n\nreturn [{ json: { url } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        192
+      ],
+      "id": "a1743a3b-eb67-458d-a6ec-acd54aeb022e",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json.data;\n\n// Find \"Total credit\" row and grab the second <td> (most recent month)\nconst match = html.match(/<th>Total credit<\\/th>\\s*<td>([\\d.]+)<\\/td>\\s*<td>([\\d.]+)<\\/td>/);\nconst rate = match ? parseFloat(match[2]) : null;\n\nreturn [{\n  json: {\n    value: rate,\n    date: new Date().toISOString().split('T')[0]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        192
+      ],
+      "id": "cbfd640a-71ab-4584-b436-26266f189a57",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "economic_indicators",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "indicator_name",
+              "condition": "eq",
+              "keyValue": "=credit_growth"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "value",
+              "fieldValue": "={{ $json.value }}"
+            },
+            {
+              "fieldId": "date",
+              "fieldValue": "={{ $json.date }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -48,
+        80
+      ],
+      "id": "2e8b34bb-bcdf-4a02-8783-6467a2afb5b5",
+      "name": "Update a row1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://www.rba.gov.au/statistics/cash-rate/",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        0
+      ],
+      "id": "b1a934e0-6464-4f00-b8c3-836a37483adf",
+      "name": "Interest rate"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -624,
+        192
+      ],
+      "id": "282a2cbd-4b73-49b3-b91d-20dd50050a88",
+      "name": "Gredit growth"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst observations = data.dataSets[0].observations;\nconst timePeriods = data.structure.dimensions.observation[6].values;\n\n// Find the most recent time period by sorting\nconst sorted = timePeriods\n  .map((t, i) => ({ date: t.id, index: i }))\n  .sort((a, b) => b.date.localeCompare(a.date));\n\nconst latestIndex = sorted[0].index;\nconst latestDate = sorted[0].date;\n\n// Get the observation value for that index\nconst key = `0:0:0:0:0:0:${latestIndex}`;\nconst value = observations[key][0];\n\nreturn [{ json: { \n  value: parseFloat(value.toFixed(1)), \n  date: latestDate + '-01'\n}}];;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        384
+      ],
+      "id": "74098f5c-75d9-45b0-87aa-252783da5e73",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "economic_indicators",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "indicator_name",
+              "condition": "eq",
+              "keyValue": "unemployment_rate"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "value",
+              "fieldValue": "={{ $json.value }}"
+            },
+            {
+              "fieldId": "date",
+              "fieldValue": "={{ $json.date }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        320
+      ],
+      "id": "28eeec6c-d27e-4d17-99d7-b4fed947820c",
+      "name": "Update a row2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://data.api.abs.gov.au/data/ABS,LF,1.0.0/M13.3.1599.10.AUS.M?startPeriod=2024-01&dimensionAtObservation=AllDimensions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        384
+      ],
+      "id": "2e022092-0e6d-4f64-b79e-221c71acddea",
+      "name": "Unemployment rate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst observations = data.dataSets[0].observations;\nconst timePeriods = data.structure.dimensions.observation[8].values;\n\n// Find most recent time period\nconst sorted = timePeriods\n  .map((t, i) => ({ date: t.id, index: i }))\n  .sort((a, b) => b.date.localeCompare(a.date));\n\nconst latestIndex = sorted[0].index;\nconst latestDate = sorted[0].date;\n\nconst key = `0:0:0:0:0:0:0:0:${latestIndex}`;\nconst value = observations[key][0];\n\nreturn [{ json: { \n  value: Math.round(value),\n  date: latestDate + '-01'\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        576
+      ],
+      "id": "1ac81767-6ddd-4998-b88d-3a9ac33ffebb",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "economic_indicators",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "indicator_name",
+              "condition": "eq",
+              "keyValue": "building_approvals"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "value",
+              "fieldValue": "={{ $json.value }}"
+            },
+            {
+              "fieldId": "date",
+              "fieldValue": "={{ $json.date }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -48,
+        512
+      ],
+      "id": "df68ccb8-e7ad-4dd0-8ccf-4f5c8dad913a",
+      "name": "Update a row3",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.data.abs.gov.au/data/ABS,BA_GCCSA,1.0.0/1.1.9.TOT.TOT.10.AUS.M?startPeriod=2024-01&dimensionAtObservation=AllDimensions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Application",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        576
+      ],
+      "id": "b8a7e142-4330-4b40-aeb6-d4d6ece78ad2",
+      "name": "Building approvals"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst observations = data.dataSets[0].observations;\nconst timePeriods = data.structure.dimensions.observation[7].values;\n\n// Sort to get most recent quarter\nconst sorted = timePeriods\n  .map((t, i) => ({ date: t.id, index: i }))\n  .sort((a, b) => b.date.localeCompare(a.date));\n\nconst latestIndex = sorted[0].index;\nconst latestDate = sorted[0].date;\n\n// MEASURE=3(idx1), INDEX=THRPIB(idx0), SECTOR=PrivatePublic(idx1), INDUSTRY=TOT(idx0), TSEST=Original(idx0), REGION=AUS(idx0), FREQ=Q(idx0)\nconst key = `1:0:1:0:0:0:0:${latestIndex}`;\nconst value = observations[key][0];\n\n// Convert quarter to date\nconst [year, q] = latestDate.split('-Q');\nconst month = (parseInt(q) * 3).toString().padStart(2, '0');\nconst date = `${year}-${month}-01`;\n\nreturn [{ json: { value: parseFloat(value.toFixed(1)), date } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        768
+      ],
+      "id": "8c3e0a6d-0f2e-4773-a1c5-0f2c347f2b1f",
+      "name": "Code in JavaScript5"
+    },
+    {
+      "parameters": {
+        "url": "https://api.data.abs.gov.au/data/ABS,WPI,1.2.0/all?startPeriod=2025-01&endPeriod=2025-09&dimensionAtObservation=AllDimensions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        768
+      ],
+      "id": "5070366a-5753-4b5a-be48-f600a33a412b",
+      "name": "Wage growth"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "economic_indicators",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "indicator_name",
+              "condition": "eq",
+              "keyValue": "wage_growth"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "value",
+              "fieldValue": "={{ $json.value }}"
+            },
+            {
+              "fieldId": "date",
+              "fieldValue": "={{ $json.date }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        672
+      ],
+      "id": "1d474f1d-1896-4d20-88ed-037e82798d8f",
+      "name": "Update a row4",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst observations = data.dataSets[0].observations;\nconst timePeriods = data.structure.dimensions.observation[5].values;\n\nconst sorted = timePeriods\n  .map((t, i) => ({ date: t.id, index: i }))\n  .sort((a, b) => b.date.localeCompare(a.date));\n\nconst latestIndex = sorted[0].index;\nconst latestDate = sorted[0].date;\n\n// MEASURE=1 (annual change in persons), SEX=1 (persons), AGE=54 (all ages), REGION=5 (Australia), FREQ=0\nconst key = `1:1:54:5:0:${latestIndex}`;\nconst value = observations[key][0];\n\nconst [year, q] = latestDate.split('-Q');\nconst month = (parseInt(q) * 3).toString().padStart(2, '0');\nconst date = `${year}-${month}-01`;\n\nreturn [{ json: { value: Math.round(value), date } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        960
+      ],
+      "id": "1526449b-7869-424a-9bbd-5cf57953d760",
+      "name": "Code in JavaScript6"
+    },
+    {
+      "parameters": {
+        "url": "https://api.data.abs.gov.au/data/ABS,ERP_Q,1.0.0/all?startPeriod=2025-Q1&dimensionAtObservation=AllDimensions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        960
+      ],
+      "id": "8619fb32-67ce-4d69-9919-aacba8508eb0",
+      "name": "population growth"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "economic_indicators",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "indicator_name",
+              "condition": "eq",
+              "keyValue": "population_growth"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "value",
+              "fieldValue": "={{ $json.value }}"
+            },
+            {
+              "fieldId": "date",
+              "fieldValue": "={{ $json.date }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        864
+      ],
+      "id": "d9fe4c98-305c-455a-98ab-70f8d93a0046",
+      "name": "Update a row5",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json.data;\n\n// Extract the data array from the JavaScript variable\nconst match = html.match(/var data = (\\[.*?\\]);/s);\nif (!match) throw new Error('Could not find data array');\n\nconst data = JSON.parse(match[1]);\n\n// Get the last entry (most recent month)\nconst latest = data[data.length - 1];\n\nconst value = parseFloat((latest.vr * 100).toFixed(2));\nconst month = String(latest.month).padStart(2, '0');\nconst date = `${latest.year}-${month}-01`;\n\nreturn [{ json: { value, date } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        1344
+      ],
+      "id": "f794b5ce-3209-477b-a2d5-d7e8dde7242d",
+      "name": "Code in JavaScript7"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "economic_indicators",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "indicator_name",
+              "condition": "eq",
+              "keyValue": "rental_vacancy_rate"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "value",
+              "fieldValue": "={{ $json.value }}"
+            },
+            {
+              "fieldId": "date",
+              "fieldValue": "={{ $json.date }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        1280
+      ],
+      "id": "44ae0220-57b6-41d9-a55c-2f25b9a8a54c",
+      "name": "Update a row6",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://sqmresearch.com.au/graph_vacancy.php?national=1&t=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        1344
+      ],
+      "id": "c269d726-9a5f-4d7f-aea6-1402564f7b07",
+      "name": "rental vacancy rate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json.data;\n\n// Date - handle the timestamp format\nconst dateMatch = html.match(/\"datePublished\":\"(\\d{4}-\\d{2}-\\d{2})/);\nconst date = dateMatch[1];\n\n// Clearance rate\nconst rateMatch = html.match(/average clearance rate of ([\\d.]+)%/);\nconst rate = parseFloat(rateMatch[1]);\n\nreturn [{ json: { value: rate, date: date } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        1152
+      ],
+      "id": "08c60cab-9d5a-42f9-b56b-4102d1136f53",
+      "name": "Code in JavaScript8"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "economic_indicators",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "indicator_name",
+              "condition": "eq",
+              "keyValue": "auction_clearance_rate"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "value",
+              "fieldValue": "={{ $json.value }}"
+            },
+            {
+              "fieldId": "date",
+              "fieldValue": "={{ $json.date }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        1088
+      ],
+      "id": "be024370-9054-4f03-8774-ab2f7210b502",
+      "name": "Update a row7",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://propertyupdate.com.au/this-weekends-auction-results-what-happened-in-sydney-melbourne-brisbane-adelaide-canberra/",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        1152
+      ],
+      "id": "672281f9-8215-4513-b7d8-cff3760cf7a7",
+      "name": "Auction clearance rate"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "interest_rate"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -304,
+        48
+      ],
+      "id": "69d07c84-b719-4a5e-9a3b-eaec05be34be",
+      "name": "HTTP Request",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "credit_growth"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -48,
+        240
+      ],
+      "id": "a6154e16-f020-495b-ab37-95b1e3cba290",
+      "name": "HTTP Request1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "unemployment_rate"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -272,
+        464
+      ],
+      "id": "2f9b283c-cc76-4f2f-92ed-653856264b76",
+      "name": "HTTP Request2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "building_approvals"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -48,
+        640
+      ],
+      "id": "792997c9-a4e2-4aa7-853a-90e14a963aaa",
+      "name": "HTTP Request3",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "wage_growth"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -352,
+        816
+      ],
+      "id": "dd62b473-ccf2-4050-aa11-83a92638f055",
+      "name": "HTTP Request4",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "population_growth"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -80,
+        1024
+      ],
+      "id": "40501761-15c2-4bc7-9d38-83bfcf1cad4c",
+      "name": "HTTP Request5",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "auction_clearance_rate"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -384,
+        1200
+      ],
+      "id": "7118f9ba-2e63-494c-b429-6011729289d0",
+      "name": "HTTP Request6",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "rental_vacancy_rate"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -112,
+        1440
+      ],
+      "id": "41f49731-4d42-4ed7-baf8-18b3378353f7",
+      "name": "HTTP Request7",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Interest rate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "rental vacancy rate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Auction clearance rate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Unemployment rate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Building approvals",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wage growth",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "population growth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Gredit growth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Update a row1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interest rate": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gredit growth": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Update a row2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unemployment rate": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Update a row3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Building approvals": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wage growth": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript5": {
+      "main": [
+        [
+          {
+            "node": "Update a row4",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a row4": {
+      "main": [
+        []
+      ]
+    },
+    "population growth": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript6": {
+      "main": [
+        [
+          {
+            "node": "Update a row5",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript7": {
+      "main": [
+        [
+          {
+            "node": "Update a row6",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rental vacancy rate": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript8": {
+      "main": [
+        [
+          {
+            "node": "Update a row7",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auction clearance rate": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a row": {
+      "main": [
+        []
+      ]
+    },
+    "Update a row1": {
+      "main": [
+        []
+      ]
+    },
+    "Update a row2": {
+      "main": [
+        []
+      ]
+    },
+    "Update a row3": {
+      "main": [
+        []
+      ]
+    },
+    "Update a row5": {
+      "main": [
+        []
+      ]
+    },
+    "Update a row7": {
+      "main": [
+        []
+      ]
+    },
+    "Update a row6": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "18c7aa82-1714-4fac-a01a-c6dec0acfa81",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9ef44294914b7ec059e3bffd08496c73f76e223b7ff7f8383143f95968dcd31b"
+  },
+  "nodeGroups": [],
+  "id": "6NibzFexx7zpWV9d",
+  "tags": []
+}
