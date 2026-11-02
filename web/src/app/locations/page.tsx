@@ -7,7 +7,7 @@ import {
 } from '@/lib/scoring/location';
 import { LocationCompare, type PriceSeriesPoint } from '@/components/LocationCompare';
 import { SetupNotice } from '@/components/SetupNotice';
-import { Card, DataStamp, PageHeader, SectionTitle } from '@/components/ui';
+import { Card, DataStamp, PageHeader, SectionTitle, StaleDate } from '@/components/ui';
 import { LOCATION_GOOD, scoreTone } from '@/lib/theme';
 import { fmtDate } from '@/lib/format';
 
@@ -65,7 +65,7 @@ export default async function LocationsPage() {
   const scored = scoreAllLocations(rows);
   const divergence = calculateRegionalDivergence(rows, new Date());
 
-  // Wide-format median price series for the comparison chart
+  // Wide-format asking price series for the comparison chart (stored as median_price)
   const priceRows = rows.filter((r) => r.metric_name === 'median_price');
   const dates = [...new Set(priceRows.map((r) => r.date))].sort();
   const priceSeries: PriceSeriesPoint[] = dates.map((date) => {
@@ -85,8 +85,9 @@ export default async function LocationsPage() {
     <div className="space-y-8">
       <PageHeader title="Location analysis">
         {scored.length} locations scored on their latest readings. The investment score starts at 50 and
-        adjusts for annual growth, rental yield, vacancy rate and days on market — the same formula the
-        Streamlit app used.
+        adjusts for annual growth, rental yield, vacancy rate and days on market. Asking price is SQM&apos;s
+        13-week average for 3-bed houses, not a sold median, and growth is measured on that asking price. Days on
+        market is entered by hand, so it can be older; any reading older than the newest shows its month.
       </PageHeader>
 
       {divergence && (
@@ -149,6 +150,7 @@ export default async function LocationsPage() {
                     {TABLE_METRICS.map((m) => (
                       <td key={m} className={`whitespace-nowrap px-4 py-3 text-right tabular-nums ${metricTone(m, loc.metrics[m]?.value)}`}>
                         {formatMetric(m, loc.metrics[m]?.value)}
+                        <StaleDate date={loc.metrics[m]?.date} latest={loc.latestDate} />
                       </td>
                     ))}
                     {!sharedAsOf && (

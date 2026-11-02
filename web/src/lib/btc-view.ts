@@ -1,13 +1,14 @@
 // Pure view-model helpers for the BTC page (no server-only import, so they
 // are unit-testable). Signal thresholds mirror get_btc_signal() in Supabase.
 
-import type { BtcContextFlag, BtcKeyLevel } from './btc';
+import type { BtcContextFlag, BtcFlagChange, BtcKeyLevel } from './btc';
 
 /** get_btc_signal() caps the flags' combined effect at ±this many points
  *  (migration 0010). Keep in step with the SQL and btc_build_request.js. */
 export const BTC_MODIFIER_CAP = 2;
 
-/** Hard limit on active flags, enforced by apply_btc_flag_suggestion(). */
+/** Limit on active flags, enforced by apply_btc_flag_suggestion(): when the
+ *  list is full, the flag that's gone longest without a refresh retires. */
 export const BTC_MAX_ACTIVE_FLAGS = 20;
 
 /** The flags' total as the score uses it: capped at ±BTC_MODIFIER_CAP. */
@@ -104,6 +105,33 @@ export function buildLadder(levels: BtcKeyLevel[], price: number | null, current
   }
   if (!placed && price !== null) rows.push({ kind: 'price', price });
   return rows;
+}
+
+export const CHANGE_LABEL: Record<string, string> = {
+  add: 'Added',
+  update: 'Updated',
+  retire: 'Retired',
+};
+
+/** A logged change's readable name: its own label, else the flag's, else its key. */
+export function changeName(change: BtcFlagChange, flags: BtcContextFlag[]): string {
+  return (
+    change.flag_label ??
+    flags.find((f) => f.flag_key === change.flag_key)?.flag_label ??
+    change.flag_key.replace(/_/g, ' ')
+  );
+}
+
+/** Tailwind classes for a video's stance chip. */
+export function stanceClass(stance: string): string {
+  switch (stance) {
+    case 'bearish':
+      return 'bg-red-500/15 text-red-300 ring-red-500/30';
+    case 'bullish':
+      return 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30';
+    default:
+      return 'bg-slate-500/15 text-slate-300 ring-slate-500/30';
+  }
 }
 
 export const CATEGORY_LABEL: Record<string, string> = {

@@ -6,10 +6,13 @@ import {
   buildLadder,
   capModifiers,
   CATEGORY_LABEL,
+  CHANGE_LABEL,
+  changeName,
   effectiveScore,
   groupFlags,
   levelSignalClass,
   scoreCeiling,
+  stanceClass,
   type FlagGroup,
 } from '@/lib/btc-view';
 import { fmtDate, fmtDateTimeUtc, fmtUsd } from '@/lib/format';
@@ -57,13 +60,14 @@ export default async function BtcPage() {
   const data = await getBtcData();
   if (!data) return <SetupNotice />;
 
-  const { levels, flags, latest, daily } = data;
+  const { levels, flags, latest, daily, videos, changes } = data;
+  const analysed = videos.filter((v) => v.status === 'analysed').slice(0, 3);
   const groups = groupFlags(flags);
   const inactive = flags.filter((f) => !f.is_active);
   const modifierSum = Math.round(groups.reduce((s, g) => s + g.net, 0) * 10) / 10;
   const cappedSum = capModifiers(modifierSum);
   const activeCount = groups.reduce((s, g) => s + g.flags.length, 0);
-  // The last log row may predate today's flag approvals (or the cap itself):
+  // The last log row may predate today's flag changes (or the cap itself):
   // say what the next run at the same price would score.
   const flagsChanged = latest?.modifier_total != null && latest.modifier_total !== cappedSum;
   const projected = latest?.base_score != null ? effectiveScore(latest.base_score, modifierSum) : null;
@@ -75,9 +79,10 @@ export default async function BtcPage() {
   return (
     <div className="space-y-8">
       <PageHeader title="BTC signal">
-        Key-level ladder and context flags maintained from research notes. Each morning the n8n brief
-        logs the signal from <code className="rounded bg-slate-800 px-1 text-slate-300">get_btc_signal()</code>:
-        the price band sets a base score, then every active flag nudges it up or down.
+        Each morning a workflow reads any new Benjamin Cowen videos and updates the context flags automatically.
+        The n8n brief then logs the signal from{' '}
+        <code className="rounded bg-slate-800 px-1 text-slate-300">get_btc_signal()</code>: the price band sets a
+        base score, and the active flags nudge it up or down, by at most ±{BTC_MODIFIER_CAP} in total.
       </PageHeader>
 
       {latest && (
@@ -234,15 +239,8 @@ export default async function BtcPage() {
             </span>
           }
         >
-          What&apos;s moving the score · {activeCount} active flags
+          What&apos;s moving the score · {activeCount} active flags (max {BTC_MAX_ACTIVE_FLAGS})
         </SectionTitle>
-        {activeCount > BTC_MAX_ACTIVE_FLAGS && (
-          <p className="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
-            {activeCount} flags are active against a limit of {BTC_MAX_ACTIVE_FLAGS}. New flags can&apos;t be added until{' '}
-            {activeCount - BTC_MAX_ACTIVE_FLAGS + 1} are retired — approve retirements in{' '}
-            <code className="rounded bg-slate-800 px-1">btc_flag_suggestions</code>.
-          </p>
-        )}
         <div className="grid gap-3 sm:grid-cols-3">
           {groups.map((g) => (
             <CategorySummary key={g.category} group={g} maxAbs={maxAbs} />
@@ -302,6 +300,69 @@ export default async function BtcPage() {
           )}
         </div>
       </section>
+
+      {analysed.length > 0 && (
+        <section>
+          <SectionTitle right={<span className="text-xs text-slate-500">AI-written summaries, not his words</span>}>
+            Latest from Benjamin Cowen
+          </SectionTitle>
+          <div className="space-y-3">
+            {analysed.map((v) => (
+              <Card key={v.video_id} as="article" tight>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <h3 className="text-sm font-medium">
+                    {v.url ? (
+                      <a href={v.url} target="_blank" rel="noopener noreferrer" className="hover:text-sky-300">
+                        {v.title}
+                      </a>
+                    ) : (
+                      v.title
+                    )}
+                  </h3>
+                  <span className="flex items-center gap-2 text-xs tabular-nums text-slate-500">
+                    {v.stance && <span className={`rounded px-2 py-0.5 ring-1 ${stanceClass(v.stance)}`}>{v.stance}</span>}
+                    {fmtDate(v.published_at)}
+                  </span>
+                </div>
+                {v.summary && <p className="mt-2 text-sm text-slate-300">{v.summary}</p>}
+                {v.key_levels && (
+                  <p className="mt-2 text-xs text-slate-400">
+                    <span className="text-slate-500">Levels:</span> {v.key_levels}
+                  </p>
+                )}
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {changes.length > 0 && (
+        <section>
+          <SectionTitle right={<span className="text-xs text-slate-500">applied automatically, newest first</span>}>
+            Recent flag changes
+          </SectionTitle>
+          <ul className="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-900/60">
+            {changes.map((c, i) => (
+              <li key={`${c.created_at}-${c.flag_key}-${i}`} className="grid grid-cols-[1fr_auto] gap-x-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm">
+                    <span className="text-slate-400">{CHANGE_LABEL[c.action] ?? c.action}:</span> {changeName(c, flags)}
+                    {c.action !== 'retire' && c.score_modifier != null && (
+                      <span className={`ml-2 tabular-nums ${c.score_modifier < 0 ? 'text-red-400' : c.score_modifier > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                        {signed(c.score_modifier)}
+                      </span>
+                    )}
+                  </p>
+                  {c.reason && <p className="mt-0.5 text-xs text-slate-400">{c.reason}</p>}
+                  {c.status === 'failed' && <p className="mt-0.5 text-xs text-red-300">Not applied: {c.apply_note}</p>}
+                  {c.status === 'applied' && c.apply_note && <p className="mt-0.5 text-xs text-amber-300/90">{c.apply_note}</p>}
+                </div>
+                <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">{fmtDate(c.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <DataStamp fetchedAt={data.fetchedAt} />
     </div>

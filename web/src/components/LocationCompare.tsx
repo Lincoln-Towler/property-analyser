@@ -2,7 +2,8 @@
 
 // Head-to-head location comparison — the interactive part of the old
 // Streamlit Location Analysis page (two selectors + metric table + score
-// gauges + median-price trend + recommendation).
+// gauges + asking-price trend + recommendation). The metric is still stored as
+// median_price, but since November it holds SQM's asking price, not a sold median.
 
 import { useState } from 'react';
 import {
@@ -23,7 +24,8 @@ import {
   type ScoredLocation,
 } from '@/lib/scoring/location';
 import { COLORS, LOCATION_GOOD, TOOLTIP_STYLE, AXIS_TICK, scoreTone } from '@/lib/theme';
-import { fmtDate, fmtMoneyTick, fmtMonthYear, isoToTs, niceScale, timeAxis, tsToIso } from '@/lib/format';
+import { fmtDate, fmtMoneyTick, isoToTs, niceScale, timeAxis, tsToIso } from '@/lib/format';
+import { StaleDate } from '@/components/ui';
 
 export interface PriceSeriesPoint {
   date: string;
@@ -44,17 +46,6 @@ function ScoreBar({ score }: { score: number }) {
     <div className="h-2 w-full rounded-full bg-slate-800">
       <div className={`h-2 rounded-full ${scoreTone(score, LOCATION_GOOD).bar}`} style={{ width: `${score}%` }} />
     </div>
-  );
-}
-
-/** A reading's date, shown only when it is older than the location's
- *  newest snapshot — otherwise every cell would repeat the same date. */
-function StaleDate({ date, latest }: { date: string | undefined; latest: string | null }) {
-  if (!date || date === latest) return null;
-  return (
-    <span className="ml-2 whitespace-nowrap text-xs text-amber-400/80" title={`Reading from ${fmtDate(date)}`}>
-      ({fmtMonthYear(date)})
-    </span>
   );
 }
 
@@ -205,7 +196,7 @@ export function LocationCompare({
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
         <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
-          Median price trend
+          Asking price trend
         </h3>
         {trend.length >= 2 ? (
           <div className="h-64 w-full">
@@ -254,7 +245,7 @@ export function LocationCompare({
           </div>
         ) : (
           <p className="rounded-md bg-slate-800/60 px-3 py-6 text-center text-sm text-slate-400">
-            Need median_price readings on at least two dates to chart a trend.
+            Need asking-price readings on at least two dates to chart a trend.
           </p>
         )}
       </section>

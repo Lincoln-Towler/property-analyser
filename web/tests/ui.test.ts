@@ -19,13 +19,16 @@ import {
   btcSignalForScore,
   buildLadder,
   capModifiers,
+  changeName,
   effectiveScore,
   groupFlags,
   levelSignalClass,
   scoreCeiling,
+  stanceClass,
 } from '../src/lib/btc-view';
 import { andersonState } from '../src/lib/scoring/anderson';
-import type { BtcContextFlag, BtcKeyLevel } from '../src/lib/btc';
+import { METRIC_LABELS } from '../src/lib/scoring/location';
+import type { BtcContextFlag, BtcFlagChange, BtcKeyLevel } from '../src/lib/btc';
 
 describe('format', () => {
   it('formats ISO dates without time-zone drift', () => {
@@ -205,6 +208,22 @@ describe('btc view', () => {
     expect(caution && caution.kind === 'level' && caution.distancePct).toBe(-3.5);
   });
 
+  it('names logged flag changes even when the row has no label', () => {
+    const change = (flag_key: string, flag_label: string | null): BtcFlagChange => ({
+      action: 'retire', flag_key, flag_label, score_modifier: null, reason: null, status: 'applied', apply_note: null, created_at: '2026-11-02',
+    });
+    const flags = [{ ...flag('known_flag', 'MACRO', -0.2), flag_label: 'A known flag' }];
+    expect(changeName(change('x', 'Own label'), flags)).toBe('Own label');
+    expect(changeName(change('known_flag', null), flags)).toBe('A known flag');
+    expect(changeName(change('gone_flag', null), flags)).toBe('gone flag');
+  });
+
+  it('colours stance chips, and anything unexpected stays neutral', () => {
+    expect(stanceClass('bearish')).toContain('red');
+    expect(stanceClass('bullish')).toContain('emerald');
+    expect(stanceClass('mixed')).toBe(stanceClass('neutral'));
+  });
+
   it('groups active flags by category with signed sums', () => {
     const groups = groupFlags([
       flag('a', 'MACRO', -0.5),
@@ -228,5 +247,11 @@ describe('anderson advice', () => {
     const recs = andersonState(new Date(Date.UTC(2024, 5, 1))).recommendations.join(' ');
     expect(recs).toMatch(/DO NOT BUY/);
     expect(recs).not.toMatch(/🟢 \*\*HOLD CASH/);
+  });
+});
+
+describe('location labels', () => {
+  it('calls the median_price metric what it now holds: an asking price', () => {
+    expect(METRIC_LABELS.median_price).toBe('Asking Price (3-bed)');
   });
 });

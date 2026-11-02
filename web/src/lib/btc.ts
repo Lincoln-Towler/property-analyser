@@ -48,11 +48,39 @@ export interface BtcDailyPoint {
   score: number;
 }
 
+/** One Cowen video the workflow has processed. `summary` and `key_levels` are
+ *  paraphrased on purpose; transcripts are never stored or shown. */
+export interface BtcVideo {
+  video_id: string;
+  title: string;
+  published_at: string | null;
+  url: string | null;
+  summary: string | null;
+  stance: string | null;
+  key_levels: string | null;
+  status: string;
+  attempts: number;
+}
+
+/** One row of the log in btc_flag_suggestions: a change that was applied, or couldn't be. */
+export interface BtcFlagChange {
+  action: string;
+  flag_key: string;
+  flag_label: string | null;
+  score_modifier: number | null;
+  reason: string | null;
+  status: string;
+  apply_note: string | null;
+  created_at: string;
+}
+
 export interface BtcData {
   levels: BtcKeyLevel[];
   flags: BtcContextFlag[];
   latest: BtcLogEntry | null;
   daily: BtcDailyPoint[];
+  videos: BtcVideo[];
+  changes: BtcFlagChange[];
   fetchedAt: string;
 }
 
@@ -67,7 +95,7 @@ export const getBtcData = cache(async (): Promise<BtcData | null> => {
 
   const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-  const [levels, flags, log] = await Promise.all([
+  const [levels, flags, log, videos, changes] = await Promise.all([
     supabase
       .from('btc_key_levels')
       .select('level_usd, label, signal, base_score, emoji, source, notes')
@@ -82,11 +110,25 @@ export const getBtcData = cache(async (): Promise<BtcData | null> => {
         'logged_at, price_usd, signal, intensity, score, base_score, modifier_total, current_band, resistance_level, support_level, pct_to_resistance, pct_to_support',
       )
       .order('logged_at', { ascending: true }),
+    supabase
+      .from('btc_video_analysis')
+      .select('video_id, title, published_at, url, summary, stance, key_levels, status, attempts')
+      .order('published_at', { ascending: false })
+      .limit(10),
+    supabase
+      .from('btc_flag_suggestions')
+      .select('action, flag_key, flag_label, score_modifier, reason, status, apply_note, created_at')
+      .in('status', ['applied', 'failed'])
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(12),
   ]);
 
   if (levels.error) throw new Error(`btc_key_levels query failed: ${levels.error.message}`);
   if (flags.error) throw new Error(`btc_context_flags query failed: ${flags.error.message}`);
   if (log.error) throw new Error(`btc_signal_log query failed: ${log.error.message}`);
+  if (videos.error) throw new Error(`btc_video_analysis query failed: ${videos.error.message}`);
+  if (changes.error) throw new Error(`btc_flag_suggestions query failed: ${changes.error.message}`);
 
   const entries: BtcLogEntry[] = (log.data ?? []).map((r) => ({
     logged_at: r.logged_at,
@@ -132,6 +174,8 @@ export const getBtcData = cache(async (): Promise<BtcData | null> => {
     })),
     latest: entries.length ? entries[entries.length - 1] : null,
     daily: [...byDay.values()],
+    videos: (videos.data ?? []).map((r) => ({ ...r, attempts: num(r.attempts) })),
+    changes: (changes.data ?? []).map((r) => ({ ...r, score_modifier: numOrNull(r.score_modifier) })),
     fetchedAt: new Date().toISOString(),
   };
 });
