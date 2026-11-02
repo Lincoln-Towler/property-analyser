@@ -3,7 +3,7 @@
 
 import type { ReactNode } from 'react';
 import { STATUS_META, type StatusKind } from '@/lib/theme';
-import { fmtDateTimeUtc } from '@/lib/format';
+import { fmtDateTimeUtc, fmtDate, fmtMonthYear } from '@/lib/format';
 
 export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
@@ -48,6 +48,17 @@ export function StatusPill({ status }: { status: StatusKind }) {
     <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium ${meta.text}`}>
       <span className={`h-2 w-2 rounded-full ${meta.dot}`} aria-hidden />
       {meta.label}
+    </span>
+  );
+}
+
+/** A reading's date, shown only when it is older than the location's
+ *  newest snapshot — otherwise every cell would repeat the same date. */
+export function StaleDate({ date, latest }: { date: string | undefined; latest: string | null }) {
+  if (!date || date === latest) return null;
+  return (
+    <span className="ml-2 whitespace-nowrap text-xs text-amber-400/80" title={`Reading from ${fmtDate(date)}`}>
+      ({fmtMonthYear(date)})
     </span>
   );
 }

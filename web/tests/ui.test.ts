@@ -14,9 +14,21 @@ import { signalForScore } from '../src/lib/scoring/engine';
 import { INDICATORS_CONFIG } from '../src/lib/scoring/config';
 import { indicatorTargetText, statusPhrase, targetBand, warningLine } from '../src/lib/scoring/ui-helpers';
 import { groupByPublisher, sourcePublisher } from '../src/lib/sources';
-import { btcSignalForScore, buildLadder, groupFlags, scoreCeiling } from '../src/lib/btc-view';
+import {
+  BTC_MODIFIER_CAP,
+  btcSignalForScore,
+  buildLadder,
+  capModifiers,
+  changeName,
+  effectiveScore,
+  groupFlags,
+  levelSignalClass,
+  scoreCeiling,
+  stanceClass,
+} from '../src/lib/btc-view';
 import { andersonState } from '../src/lib/scoring/anderson';
-import type { BtcContextFlag, BtcKeyLevel } from '../src/lib/btc';
+import { METRIC_LABELS } from '../src/lib/scoring/location';
+import type { BtcContextFlag, BtcFlagChange, BtcKeyLevel } from '../src/lib/btc';
 
 describe('format', () => {
   it('formats ISO dates without time-zone drift', () => {
@@ -165,9 +177,27 @@ describe('btc view', () => {
     expect(btcSignalForScore(2.49)).toBe('SELL / TAKE PROFIT');
   });
 
-  it('finds the score ceiling when flags swamp every band', () => {
-    expect(scoreCeiling([level(31750, 9.8), level(83000, 2)], -7.5)).toEqual({ score: 2.3, signal: 'SELL / TAKE PROFIT' });
+  it('caps the flags at ±2 like get_btc_signal()', () => {
+    expect(BTC_MODIFIER_CAP).toBe(2);
+    expect(capModifiers(-6.7)).toBe(-2);
+    expect(capModifiers(2.4)).toBe(2);
+    expect(capModifiers(-1.3)).toBe(-1.3);
+    // $77.7K sits in the $75K band (base 3.5): 3.5 - 2 = 1.5, not 3.5 - 6.7
+    expect(effectiveScore(3.5, -6.7)).toBe(1.5);
+    expect(effectiveScore(2, -6.7)).toBe(1); // clamped at 1
+    expect(effectiveScore(9.8, 3)).toBe(10); // clamped at 10
+  });
+
+  it('computes the score ceiling with the capped flag total', () => {
+    // Before the cap, -7.5 left even the best band at 2.3 (SELL at every price)
+    expect(scoreCeiling([level(31750, 9.8), level(83000, 2)], -7.5)).toEqual({ score: 7.8, signal: 'STRONG BUY' });
     expect(scoreCeiling([level(31750, 9.8)], 0)).toEqual({ score: 9.8, signal: 'MAX BUY' });
+  });
+
+  it('colours chips for both stored labels and signal text', () => {
+    expect(levelSignalClass('CAUTION / REDUCE')).toContain('orange');
+    expect(levelSignalClass('SELL / TAKE PROFIT')).toBe(levelSignalClass('SELL'));
+    expect(levelSignalClass('LIGHT BUY')).toBe(levelSignalClass('LIGHT_BUY'));
   });
 
   it('slots the current price into the ladder', () => {
@@ -176,6 +206,22 @@ describe('btc view', () => {
     const caution = rows.find((r) => r.kind === 'level' && r.level.level_usd === 75000);
     expect(caution && caution.kind === 'level' && caution.isCurrentBand).toBe(true);
     expect(caution && caution.kind === 'level' && caution.distancePct).toBe(-3.5);
+  });
+
+  it('names logged flag changes even when the row has no label', () => {
+    const change = (flag_key: string, flag_label: string | null): BtcFlagChange => ({
+      action: 'retire', flag_key, flag_label, score_modifier: null, reason: null, status: 'applied', apply_note: null, created_at: '2026-11-02',
+    });
+    const flags = [{ ...flag('known_flag', 'MACRO', -0.2), flag_label: 'A known flag' }];
+    expect(changeName(change('x', 'Own label'), flags)).toBe('Own label');
+    expect(changeName(change('known_flag', null), flags)).toBe('A known flag');
+    expect(changeName(change('gone_flag', null), flags)).toBe('gone flag');
+  });
+
+  it('colours stance chips, and anything unexpected stays neutral', () => {
+    expect(stanceClass('bearish')).toContain('red');
+    expect(stanceClass('bullish')).toContain('emerald');
+    expect(stanceClass('mixed')).toBe(stanceClass('neutral'));
   });
 
   it('groups active flags by category with signed sums', () => {
@@ -201,5 +247,11 @@ describe('anderson advice', () => {
     const recs = andersonState(new Date(Date.UTC(2024, 5, 1))).recommendations.join(' ');
     expect(recs).toMatch(/DO NOT BUY/);
     expect(recs).not.toMatch(/🟢 \*\*HOLD CASH/);
+  });
+});
+
+describe('location labels', () => {
+  it('calls the median_price metric what it now holds: an asking price', () => {
+    expect(METRIC_LABELS.median_price).toBe('Asking Price (3-bed)');
   });
 });

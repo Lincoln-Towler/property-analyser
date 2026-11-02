@@ -1,120 +1,62 @@
 # Property Analyser - Architecture
 
-## Overview
+A personal Australian property-market analyser, plus a separate Bitcoin cycle signal that shares the database. For how to work on it, see `CLAUDE.md` in the repo root.
 
-Australian Property Investment Analysis Dashboard built with **Streamlit** (Python). Single-file application (`property_analysis_dashboard.py`, ~4,935 lines) deployed on **Streamlit Cloud** with **Supabase** (PostgreSQL) as the production database and **SQLite** as local fallback.
+## How it fits together
 
-## Tech Stack
+```
+Public sources ──▶ n8n on TrueNAS ──writes──▶ Supabase ──reads──▶ Next.js site on Vercel
+                   (service role)             (Postgres)          (public, read-only)
+```
 
-| Component | Technology |
-|-----------|-----------|
-| Frontend | Streamlit |
-| Charts | Plotly (go + express) |
-| Production DB | Supabase (PostgreSQL) |
-| Local DB | SQLite |
-| Automation | n8n (feeds economic_indicators_history) |
-| Deployment | Streamlit Cloud |
+Nothing on the website can change the data. The only writers are the n8n workflows and the site's daily snapshot job, both using the service role.
 
-## Navigation Pages
+## Workflows
 
-1. **Dashboard** - Quick stats, key indicators at a glance, market score
-2. **Ultimate Analysis** - Full v3 score with volatility, sub-scores, confidence intervals, data audit
-3. **Economic Indicators** - Current values, crash risk indicators, historical trend charts
-4. **Location Analysis** - Property data comparison between locations
-5. **Anderson Cycle Tracker** - 18.6-year property cycle position
-6. **Leading Indicators** - 5 modules (Infrastructure, Migration, Jobs, Supply/Demand, Suburb Scorer)
-7. **Data Management** - Manual entry, CSV import, view/edit/delete, export
+| Workflow | When (Adelaide) | Writes to |
+|---|---|---|
+| Economic Indicators | Mondays 7:00am | `economic_indicators_history` |
+| Location Data (SQM) | Mondays 7:15am | `property_data` |
+| Cowen Videos → BTC flags | Daily 8:30am | `btc_video_analysis`, `btc_flag_suggestions` (which applies to `btc_context_flags`) |
+| BTC brief (separate, not in this repo) | Daily | calls `get_btc_signal`, which logs to `btc_signal_log` |
+| `/api/snapshot` (Vercel Cron, not n8n) | Daily, 21:00 UTC | `market_score_history` |
 
-## Database Schema
+## Site pages
 
-### Core Tables (created in `init_database()`)
+| Page | Shows |
+|---|---|
+| `/` | Market score, four pillars, key indicators, commentary, score history |
+| `/indicators` | Each indicator against its target, with a history chart |
+| `/locations` | Locations ranked, and a head-to-head comparison |
+| `/cycle` | The 18.6-year Anderson cycle, anchored at 2008 |
+| `/btc` | BTC signal, price ladder, flags, Cowen summaries, recent flag changes |
+| `/audit` | Automation health, data freshness, and readings worth a second look |
 
-#### `economic_indicators`
-| Column | Type | Notes |
-|--------|------|-------|
-| id | SERIAL / INTEGER PK | Auto-increment |
-| date | DATE | NOT NULL |
-| indicator_name | TEXT | NOT NULL |
-| value | REAL | NOT NULL |
-| source | TEXT | |
-| created_at | TIMESTAMP | Default CURRENT_TIMESTAMP |
-| | | UNIQUE(date, indicator_name) |
+## Tables
 
-#### `economic_indicators_history` (Supabase only, created externally)
-| Column | Type | Notes |
-|--------|------|-------|
-| id | INT8 | |
-| date | DATE | |
-| indicator_name | TEXT | |
-| value | NUMERIC | |
-| recorded_at | TIMESTAMPTZ | |
+| Table | Holds |
+|---|---|
+| `economic_indicators` | Manual and backfilled readings, with a `source` |
+| `economic_indicators_history` | Readings from the n8n feed |
+| `economic_indicators_combined` | A view merging both; a manual row wins on the same date |
+| `property_data` | `(date, location, metric_name, value, source)` for 11 locations |
+| `market_score_history` | One market score per day |
+| `btc_key_levels` | 14 price bands, each with a base score |
+| `btc_context_flags` | The flags that nudge the BTC score |
+| `btc_flag_suggestions` | The log of flag changes; saving a row applies it |
+| `btc_video_analysis` | One paraphrased summary per Cowen video |
+| `btc_signal_log` | One BTC reading per day |
 
-> No `source` or `created_at` columns. Fed by n8n automation.
+Migrations in `supabase/migrations/` own the schema. Anyone with the public key can read the market tables and nothing else, and can't write to any table.
 
-#### `economic_indicators_combined` (VIEW)
-Created dynamically by `economic_indicators_view()`. Combines both tables using `UNION ALL` with deduplication - current table takes priority over history when the same `(date, indicator_name)` exists in both.
+## Scoring
 
-Columns: `date`, `indicator_name`, `value`, `source`
+- **Market score:** `web/src/lib/scoring/`, a TypeScript port of the Python in `legacy/`, tested against outputs from the original. See [[Score Calculation Pipeline]].
+- **BTC score:** `get_btc_signal(price)` in Supabase. The price band's base score, plus the active flags capped at ±2, kept between 1 and 10.
 
-#### `property_data`
-| Column | Type | Notes |
-|--------|------|-------|
-| id | SERIAL / INTEGER PK | |
-| date | DATE | NOT NULL |
-| location | TEXT | NOT NULL |
-| metric_name | TEXT | NOT NULL |
-| value | REAL | NOT NULL |
-| source | TEXT | |
-| created_at | TIMESTAMP | |
-| | | UNIQUE(date, location, metric_name) |
+## Related notes
 
-#### `market_sentiment`
-| Column | Type |
-|--------|------|
-| id | SERIAL / INTEGER PK |
-| date | DATE |
-| source | TEXT |
-| sentiment_score | REAL |
-| notes | TEXT |
-| created_at | TIMESTAMP |
-
-#### `market_commentary`
-| Column | Type |
-|--------|------|
-| id | INTEGER PK |
-| commentary | TEXT |
-| updated_date | DATE |
-
-### Leading Indicator Tables
-
-#### `infrastructure_projects`
-Tracks transport, hospital, school, commercial projects with location, budget, dates, status, and impact radius.
-
-#### `migration_data`
-State-level interstate/overseas migration, international students, total population. UNIQUE(date, state).
-
-#### `employment_data`
-Regional employment stats: total employed, unemployment rate, job ads, growth rate. UNIQUE(date, region).
-
-#### `employer_events`
-Major employer events (expansion, closure, relocation) with jobs impact and industry.
-
-#### `suburb_scores`
-Calculated composite scores per suburb: infrastructure, population, employment, supply/demand, credit, gentrification, total score, rank. UNIQUE(date, suburb, state).
-
-## Helper Functions
-
-| Function | Purpose |
-|----------|---------|
-| `get_ph(conn)` | Returns `%s` (Postgres) or `?` (SQLite) placeholder |
-| `db_upsert(cursor, conn, table, columns, values, conflict_cols)` | Insert with ON CONFLICT UPDATE |
-| `csv_import_section(label, columns, table, ...)` | Reusable CSV import UI widget |
-| `is_postgres(conn)` | Type check for connection |
-| `economic_indicators_view(conn)` | Returns combined view name, creates view if needed |
-
-## Related Notes
-
+- [[Handoff 2026-11-02 (close-out)]]
 - [[Score Calculation Pipeline]]
 - [[Economic Indicators Integration]]
-- [[Leading Indicators Modules]]
 - [[Changelog]]

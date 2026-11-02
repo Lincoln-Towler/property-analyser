@@ -1,4 +1,6 @@
 import { getSiteData } from '@/lib/data';
+import { getBtcData } from '@/lib/btc';
+import { buildFeedHealth } from '@/lib/feed-health';
 import { buildAudit } from '@/lib/scoring/engine';
 import { EXTRA_INDICATOR_NAMES, INDICATORS_CONFIG, STALE_AFTER_DAYS } from '@/lib/scoring/config';
 import { auditPropertyData } from '@/lib/property-audit';
@@ -30,6 +32,14 @@ export default async function AuditPage() {
 
   const audit = buildAudit(data.series, new Date());
   const propertyAudit = auditPropertyData(data.propertyData);
+  const btc = await getBtcData();
+  const health = buildFeedHealth({
+    series: data.series,
+    propertyData: data.propertyData,
+    scoreHistory: data.scoreHistory,
+    btc,
+    now: new Date(),
+  });
 
   // Scored weight that cannot move: stale, or unable to trend at all.
   const frozen = audit.filter((a) => a.weight > 0 && (a.stale || !a.can_trend));
@@ -44,6 +54,66 @@ export default async function AuditPage() {
         <code className="rounded bg-slate-800 px-1">economic_indicators_history</code>, everything else was
         entered manually.
       </PageHeader>
+
+      <section
+        className={`rounded-xl border p-5 text-sm ${health.healthy ? 'border-slate-800 bg-slate-900/60' : 'border-red-700/60 bg-red-950/30'}`}
+      >
+        <h2 className="mb-1 font-medium">
+          {health.healthy ? 'Automation health: everything ran on schedule' : 'Automation health: something needs a look'}
+        </h2>
+        <p className="mb-3 text-xs text-slate-400">
+          The feeds run by themselves, so this is where a stopped one shows up.
+        </p>
+        <ul className="divide-y divide-slate-800">
+          {health.jobs.map((j) => (
+            <li key={j.name} className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 py-2 sm:grid-cols-[1fr_9rem_8rem_auto]">
+              <span className="font-medium">{j.name}</span>
+              <span className={`whitespace-nowrap text-xs font-medium sm:order-last ${j.ok ? 'text-emerald-400' : 'text-red-300'}`}>
+                {j.ok ? 'On schedule' : 'Late'}
+              </span>
+              <span className="text-xs text-slate-500">{j.schedule}</span>
+              <span className="whitespace-nowrap text-xs tabular-nums text-slate-400">{fmtDate(j.latest)}</span>
+            </li>
+          ))}
+        </ul>
+        {health.late.length > 0 && (
+          <div className="mt-3">
+            <h3 className="mb-1 text-xs uppercase tracking-wide text-slate-500">Older than expected</h3>
+            <ul className="space-y-1 text-slate-300">
+              {health.late.map((l) => (
+                <li key={l.indicator}>
+                  <span className="font-medium">{l.displayName}</span> — {l.ageDays === null ? 'no data' : `latest reading ${fmtDate(l.latest)}`}
+                  {l.manual ? ' (entered by hand, needs a manual update)' : ' (the feed may have stopped)'}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {health.failedVideos.length > 0 && (
+          <div className="mt-3">
+            <h3 className="mb-1 text-xs uppercase tracking-wide text-slate-500">Videos that couldn&apos;t be analysed</h3>
+            <ul className="space-y-1 text-slate-300">
+              {health.failedVideos.map((v) => (
+                <li key={v.title}>
+                  {v.title} <span className="text-slate-500">({v.attempts} of 3 attempts)</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {health.failedChanges.length > 0 && (
+          <div className="mt-3">
+            <h3 className="mb-1 text-xs uppercase tracking-wide text-slate-500">Flag changes that didn&apos;t apply</h3>
+            <ul className="space-y-1 text-slate-300">
+              {health.failedChanges.map((c) => (
+                <li key={c.flag_key}>
+                  {c.flag_key}: {c.note}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
 
       {frozen.length > 0 && (
         <section className="rounded-xl border border-amber-700/60 bg-amber-950/30 p-5 text-sm">

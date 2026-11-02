@@ -1,0 +1,999 @@
+{
+  "name": "Economic Indicators",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1072,
+        672
+      ],
+      "id": "0f664fd8-565c-41b3-b37e-b40703d95c3d",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://www.rba.gov.au/statistics/cash-rate/",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        0
+      ],
+      "id": "b1a934e0-6464-4f00-b8c3-836a37483adf",
+      "name": "Fetch cash rate (RBA)",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reads the RBA cash rate page and pulls the current cash rate target\n// from the newest row of the table: | date | change | cash rate |\ntry {\n  const html = String($input.first().json.data || '');\n  const row = html.match(/<tbody[\\s\\S]*?<tr>\\s*<th[^>]*>([^<]+)<\\/th>\\s*<td[^>]*>[^<]*<\\/td>\\s*<td[^>]*>\\s*([\\d.]+)\\s*<\\/td>/);\n  if (!row) throw new Error('could not find the cash rate table');\n\n  const value = parseFloat(row[2]);\n  // Safety check: never save a number that can't be a cash rate\n  if (!(value >= 0.1 && value <= 20)) throw new Error('unexpected value ' + row[2]);\n\n  return [{ json: { value, date: new Date().toISOString().split('T')[0] } }];\n} catch (e) {\n  console.log('Cash rate skipped: ' + e.message);\n  return []; // nothing saved, the other feeds keep running\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        0
+      ],
+      "id": "1cd2b7aa-a56b-4d4d-a7e9-9ade6321fec4",
+      "name": "Parse cash rate"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "interest_rate"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "69d07c84-b719-4a5e-9a3b-eaec05be34be",
+      "name": "Save cash rate",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// The RBA publishes each month's credit figures at the END of the following month,\n// so last month's page usually doesn't exist yet. Ask for last month AND the month\n// before; the next step uses whichever page is actually published.\nconst now = new Date();\nconst items = [];\nfor (const monthsBack of [1, 2]) {\n  const d = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);\n  const mm = String(d.getMonth() + 1).padStart(2, '0');\n  const yy = String(d.getFullYear()).slice(-2);\n  items.push({ json: { url: `https://www.rba.gov.au/statistics/frequency/fin-agg/${d.getFullYear()}/fin-agg-${mm}${yy}.html` } });\n}\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        192
+      ],
+      "id": "a1743a3b-eb67-458d-a6ec-acd54aeb022e",
+      "name": "Build RBA credit URLs"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -624,
+        192
+      ],
+      "id": "282a2cbd-4b73-49b3-b91d-20dd50050a88",
+      "name": "Fetch credit pages (RBA)",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reads the RBA Financial Aggregates page and pulls monthly HOUSING credit growth\n// (the newest month in the \"Housing\" row). Pages that aren't published yet are skipped.\nconst MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',\n  'August', 'September', 'October', 'November', 'December'];\n\nfor (const item of $input.all()) {\n  // RBA writes negative numbers with a special minus sign; turn it into a normal \"-\"\n  const html = String(item.json.data || '').replace(/&minus;|&#8722;|−/g, '-');\n\n  const title = html.match(/<title>\\s*Financial Aggregates\\s+([A-Za-z]+)\\s+(\\d{4})/);\n  const row = html.match(/Housing\\s*<\\/th>\\s*<td[^>]*>\\s*(-?[\\d.]+)\\s*<\\/td>\\s*<td[^>]*>\\s*(-?[\\d.]+)\\s*<\\/td>/);\n  if (!title || !row) continue; // e.g. a \"page not found\" for a month not published yet\n\n  const month = MONTHS.indexOf(title[1]);\n  const value = parseFloat(row[2]);\n  if (month < 0 || !(value > -5 && value < 5)) continue;\n\n  return [{ json: { value, date: `${title[2]}-${String(month + 1).padStart(2, '0')}-01` } }];\n}\n\nconsole.log('Housing credit skipped: no published RBA page found');\nreturn [];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        192
+      ],
+      "id": "cbfd640a-71ab-4584-b436-26266f189a57",
+      "name": "Parse housing credit"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "credit_growth"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -176,
+        192
+      ],
+      "id": "a6154e16-f020-495b-ab37-95b1e3cba290",
+      "name": "Save credit growth",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://data.api.abs.gov.au/rest/data/ABS,LF/M13.3.1599.20.AUS.M?lastNObservations=1&dimensionAtObservation=AllDimensions&format=jsondata",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        384
+      ],
+      "id": "2e022092-0e6d-4f64-b79e-221c71acddea",
+      "name": "Fetch unemployment (ABS)",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- Helpers for the ABS Data API (same in each ABS step) ----\n// Turns an ABS response into a list of { period, value }, oldest first.\nfunction readAbs(raw) {\n  if (!raw || raw.error) throw new Error('ABS request failed');\n  let root = typeof raw.data === 'string' ? JSON.parse(raw.data) : raw;\n  if (root.data && root.data.dataSets) root = root.data; // current ABS format wraps everything in \"data\"\n  const dims = (root.structure || root.structures[0]).dimensions.observation;\n  const timePos = dims.findIndex(d => d.id === 'TIME_PERIOD');\n  const rows = [];\n  for (const [key, obs] of Object.entries(root.dataSets[0].observations)) {\n    const value = Number(obs[0]);\n    if (obs[0] === null || Number.isNaN(value)) continue;\n    rows.push({ period: dims[timePos].values[Number(key.split(':')[timePos])].id, value });\n  }\n  if (!rows.length) throw new Error('ABS returned no figures');\n  return rows.sort((a, b) => a.period.localeCompare(b.period));\n}\n// \"2026-09\" -> \"2026-09-01\"   \"2026-Q2\" -> \"2026-06-01\"\nfunction periodToDate(p) {\n  const q = p.match(/^(\\d{4})-Q([1-4])$/);\n  return q ? `${q[1]}-${String(q[2] * 3).padStart(2, '0')}-01` : `${p.slice(0, 7)}-01`;\n}\n\n// Seasonally adjusted unemployment rate (the headline figure ABS reports)\ntry {\n  const rows = readAbs($input.first().json);\n  const latest = rows[rows.length - 1];\n  const value = Math.round(latest.value * 10) / 10;\n  if (!(value > 1 && value < 20)) throw new Error('unexpected value ' + latest.value);\n  return [{ json: { value, date: periodToDate(latest.period) } }];\n} catch (e) {\n  console.log('Unemployment skipped: ' + e.message);\n  return [];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        384
+      ],
+      "id": "74098f5c-75d9-45b0-87aa-252783da5e73",
+      "name": "Parse unemployment"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "unemployment_rate"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -400,
+        384
+      ],
+      "id": "2f9b283c-cc76-4f2f-92ed-653856264b76",
+      "name": "Save unemployment",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://data.api.abs.gov.au/rest/data/ABS,BA_GCCSA/1.1.9.TOT.TOT.10.AUS.M?lastNObservations=1&dimensionAtObservation=AllDimensions&format=jsondata",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        576
+      ],
+      "id": "b8a7e142-4330-4b40-aeb6-d4d6ece78ad2",
+      "name": "Fetch building approvals (ABS)",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- Helpers for the ABS Data API (same in each ABS step) ----\n// Turns an ABS response into a list of { period, value }, oldest first.\nfunction readAbs(raw) {\n  if (!raw || raw.error) throw new Error('ABS request failed');\n  let root = typeof raw.data === 'string' ? JSON.parse(raw.data) : raw;\n  if (root.data && root.data.dataSets) root = root.data; // current ABS format wraps everything in \"data\"\n  const dims = (root.structure || root.structures[0]).dimensions.observation;\n  const timePos = dims.findIndex(d => d.id === 'TIME_PERIOD');\n  const rows = [];\n  for (const [key, obs] of Object.entries(root.dataSets[0].observations)) {\n    const value = Number(obs[0]);\n    if (obs[0] === null || Number.isNaN(value)) continue;\n    rows.push({ period: dims[timePos].values[Number(key.split(':')[timePos])].id, value });\n  }\n  if (!rows.length) throw new Error('ABS returned no figures');\n  return rows.sort((a, b) => a.period.localeCompare(b.period));\n}\n// \"2026-09\" -> \"2026-09-01\"   \"2026-Q2\" -> \"2026-06-01\"\nfunction periodToDate(p) {\n  const q = p.match(/^(\\d{4})-Q([1-4])$/);\n  return q ? `${q[1]}-${String(q[2] * 3).padStart(2, '0')}-01` : `${p.slice(0, 7)}-01`;\n}\n\n// Total dwellings approved in Australia for the latest month.\n// Note: the ABS API only has the unadjusted (\"original\") monthly series for this.\ntry {\n  const rows = readAbs($input.first().json);\n  const latest = rows[rows.length - 1];\n  const value = Math.round(latest.value);\n  if (!(value > 5000 && value < 40000)) throw new Error('unexpected value ' + latest.value);\n  return [{ json: { value, date: periodToDate(latest.period) } }];\n} catch (e) {\n  console.log('Building approvals skipped: ' + e.message);\n  return [];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        576
+      ],
+      "id": "1ac81767-6ddd-4998-b88d-3a9ac33ffebb",
+      "name": "Parse building approvals"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "building_approvals"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -400,
+        576
+      ],
+      "id": "792997c9-a4e2-4aa7-853a-90e14a963aaa",
+      "name": "Save building approvals",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://data.api.abs.gov.au/rest/data/ABS,WPI/3.THRPEB.7.TOT.20.AUS.Q?lastNObservations=1&dimensionAtObservation=AllDimensions&format=jsondata",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        768
+      ],
+      "id": "5070366a-5753-4b5a-be48-f600a33a412b",
+      "name": "Fetch wage growth (ABS)",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- Helpers for the ABS Data API (same in each ABS step) ----\n// Turns an ABS response into a list of { period, value }, oldest first.\nfunction readAbs(raw) {\n  if (!raw || raw.error) throw new Error('ABS request failed');\n  let root = typeof raw.data === 'string' ? JSON.parse(raw.data) : raw;\n  if (root.data && root.data.dataSets) root = root.data; // current ABS format wraps everything in \"data\"\n  const dims = (root.structure || root.structures[0]).dimensions.observation;\n  const timePos = dims.findIndex(d => d.id === 'TIME_PERIOD');\n  const rows = [];\n  for (const [key, obs] of Object.entries(root.dataSets[0].observations)) {\n    const value = Number(obs[0]);\n    if (obs[0] === null || Number.isNaN(value)) continue;\n    rows.push({ period: dims[timePos].values[Number(key.split(':')[timePos])].id, value });\n  }\n  if (!rows.length) throw new Error('ABS returned no figures');\n  return rows.sort((a, b) => a.period.localeCompare(b.period));\n}\n// \"2026-09\" -> \"2026-09-01\"   \"2026-Q2\" -> \"2026-06-01\"\nfunction periodToDate(p) {\n  const q = p.match(/^(\\d{4})-Q([1-4])$/);\n  return q ? `${q[1]}-${String(q[2] * 3).padStart(2, '0')}-01` : `${p.slice(0, 7)}-01`;\n}\n\n// Headline Wage Price Index: annual % change, excluding bonuses,\n// private and public sectors, all industries, seasonally adjusted\ntry {\n  const rows = readAbs($input.first().json);\n  const latest = rows[rows.length - 1];\n  const value = Math.round(latest.value * 10) / 10;\n  if (!(value > -2 && value < 10)) throw new Error('unexpected value ' + latest.value);\n  return [{ json: { value, date: periodToDate(latest.period) } }];\n} catch (e) {\n  console.log('Wage growth skipped: ' + e.message);\n  return [];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        768
+      ],
+      "id": "8c3e0a6d-0f2e-4773-a1c5-0f2c347f2b1f",
+      "name": "Parse wage growth"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "wage_growth"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -400,
+        768
+      ],
+      "id": "dd62b473-ccf2-4050-aa11-83a92638f055",
+      "name": "Save wage growth",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://data.api.abs.gov.au/rest/data/ABS,ERP_COMP_Q/10.AUS.Q?lastNObservations=5&dimensionAtObservation=AllDimensions&format=jsondata",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        960
+      ],
+      "id": "8619fb32-67ce-4d69-9919-aacba8508eb0",
+      "name": "Fetch population (ABS)",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---- Helpers for the ABS Data API (same in each ABS step) ----\n// Turns an ABS response into a list of { period, value }, oldest first.\nfunction readAbs(raw) {\n  if (!raw || raw.error) throw new Error('ABS request failed');\n  let root = typeof raw.data === 'string' ? JSON.parse(raw.data) : raw;\n  if (root.data && root.data.dataSets) root = root.data; // current ABS format wraps everything in \"data\"\n  const dims = (root.structure || root.structures[0]).dimensions.observation;\n  const timePos = dims.findIndex(d => d.id === 'TIME_PERIOD');\n  const rows = [];\n  for (const [key, obs] of Object.entries(root.dataSets[0].observations)) {\n    const value = Number(obs[0]);\n    if (obs[0] === null || Number.isNaN(value)) continue;\n    rows.push({ period: dims[timePos].values[Number(key.split(':')[timePos])].id, value });\n  }\n  if (!rows.length) throw new Error('ABS returned no figures');\n  return rows.sort((a, b) => a.period.localeCompare(b.period));\n}\n// \"2026-09\" -> \"2026-09-01\"   \"2026-Q2\" -> \"2026-06-01\"\nfunction periodToDate(p) {\n  const q = p.match(/^(\\d{4})-Q([1-4])$/);\n  return q ? `${q[1]}-${String(q[2] * 3).padStart(2, '0')}-01` : `${p.slice(0, 7)}-01`;\n}\n\n// Population growth over the last 12 months (number of people).\n// ABS gives the population in thousands each quarter, so compare the latest\n// quarter with the same quarter a year earlier.\ntry {\n  const rows = readAbs($input.first().json);\n  const latest = rows[rows.length - 1];\n  const [year, quarter] = latest.period.split('-');\n  const yearAgo = rows.find(r => r.period === `${Number(year) - 1}-${quarter}`);\n  if (!yearAgo) throw new Error('no figure for a year earlier');\n\n  const value = Math.round((latest.value - yearAgo.value) * 1000);\n  if (!(value > 50000 && value < 1500000)) throw new Error('unexpected value ' + value);\n  return [{ json: { value, date: periodToDate(latest.period) } }];\n} catch (e) {\n  console.log('Population growth skipped: ' + e.message);\n  return [];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        960
+      ],
+      "id": "1526449b-7869-424a-9bbd-5cf57953d760",
+      "name": "Parse population growth"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "population_growth"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -400,
+        960
+      ],
+      "id": "40501761-15c2-4bc7-9d38-83bfcf1cad4c",
+      "name": "Save population growth",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://propertyupdate.com.au/this-weekends-auction-results-what-happened-in-sydney-melbourne-brisbane-adelaide-canberra/",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        1152
+      ],
+      "id": "672281f9-8215-4513-b7d8-cff3760cf7a7",
+      "name": "Fetch auction results",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// National weekend auction clearance rate from the weekly PropertyUpdate report.\n// The page can contain more than one week's report, each saying\n// \"average clearance rate of X% ... than the Y% reported over the previous week\".\n// The newest is the one that no other report refers to as the previous week.\ntry {\n  const html = String($input.first().json.data || '');\n  const text = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\\s+/g, ' ');\n\n  const reports = [...text.matchAll(/average clearance rate of (?:just |only )?([\\d.]+)%[^%]{0,150}?the ([\\d.]+)% reported over the previous week/gi)]\n    .map(m => ({ current: parseFloat(m[1]), previous: parseFloat(m[2]) }));\n  let pick = reports.find(r => !reports.some(o => o !== r && o.previous === r.current));\n\n  // Fallback if the wording changes: last \"average clearance rate of X%\" on the page\n  if (!pick) {\n    const any = [...text.matchAll(/average clearance rate of (?:just |only )?([\\d.]+)%/gi)];\n    if (any.length) pick = { current: parseFloat(any[any.length - 1][1]) };\n  }\n  if (!pick || !(pick.current > 10 && pick.current < 100)) throw new Error('no clearance rate found');\n\n  const published = html.match(/\"datePublished\":\"(\\d{4}-\\d{2}-\\d{2})/);\n  const date = published ? published[1] : new Date().toISOString().split('T')[0];\n  return [{ json: { value: pick.current, date } }];\n} catch (e) {\n  console.log('Clearance rate skipped: ' + e.message);\n  return [];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        1152
+      ],
+      "id": "08c60cab-9d5a-42f9-b56b-4102d1136f53",
+      "name": "Parse clearance rate"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "auction_clearance_rate"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -400,
+        1152
+      ],
+      "id": "7118f9ba-2e63-494c-b429-6011729289d0",
+      "name": "Save clearance rate",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://sqmresearch.com.au/property/vacancy-rates?national=1&t=1",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -848,
+        1344
+      ],
+      "id": "c269d726-9a5f-4d7f-aea6-1402564f7b07",
+      "name": "Fetch vacancy rate (SQM)",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// SQM national rental vacancy rate: the page holds the full monthly history\n// in a \"var data = [...]\" block; take the newest month\ntry {\n  const html = String($input.first().json.data || '');\n  const match = html.match(/var data = (\\[.*?\\]);/s);\n  if (!match) throw new Error('could not find the data block');\n\n  const data = JSON.parse(match[1])\n    .sort((a, b) => (a.year - b.year) || (a.month - b.month));\n  const latest = data[data.length - 1];\n  const value = Math.round(Number(latest.vr) * 10000) / 100; // 0.0139 -> 1.39 (%)\n  if (!(value > 0.1 && value < 10)) throw new Error('unexpected value ' + latest.vr);\n\n  return [{ json: { value, date: `${latest.year}-${String(latest.month).padStart(2, '0')}-01` } }];\n} catch (e) {\n  console.log('Vacancy rate skipped: ' + e.message);\n  return [];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        1344
+      ],
+      "id": "f794b5ce-3209-477b-a2d5-d7e8dde7242d",
+      "name": "Parse vacancy rate"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://uorrpukzqwyvzbewgudk.supabase.co/rest/v1/economic_indicators_history?on_conflict=date,indicator_name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $json.date }}"
+            },
+            {
+              "name": "indicator_name",
+              "value": "rental_vacancy_rate"
+            },
+            {
+              "name": "value",
+              "value": "={{ $json.value }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -400,
+        1344
+      ],
+      "id": "41f49731-4d42-4ed7-baf8-18b3378353f7",
+      "name": "Save vacancy rate",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0NLZ4l4z7Vzt7w2t",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Economic indicators (fixed 2 Nov 2026)\nEach row fetches one indicator, reads the number, and saves it to `economic_indicators_history`.\n\n- If a source fails or looks wrong, that row saves nothing and the others keep running.\n- The score audit shows any indicator that has gone stale.",
+        "height": 220,
+        "width": 420,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1520,
+        520
+      ],
+      "id": "5b0d7d2e-3c1a-4f8e-9a63-6f2a9c1e7b41",
+      "name": "About this workflow"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch cash rate (RBA)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build RBA credit URLs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch unemployment (ABS)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch building approvals (ABS)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch wage growth (ABS)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch population (ABS)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch auction results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch vacancy rate (SQM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch cash rate (RBA)": {
+      "main": [
+        [
+          {
+            "node": "Parse cash rate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse cash rate": {
+      "main": [
+        [
+          {
+            "node": "Save cash rate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build RBA credit URLs": {
+      "main": [
+        [
+          {
+            "node": "Fetch credit pages (RBA)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch credit pages (RBA)": {
+      "main": [
+        [
+          {
+            "node": "Parse housing credit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse housing credit": {
+      "main": [
+        [
+          {
+            "node": "Save credit growth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch unemployment (ABS)": {
+      "main": [
+        [
+          {
+            "node": "Parse unemployment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse unemployment": {
+      "main": [
+        [
+          {
+            "node": "Save unemployment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch building approvals (ABS)": {
+      "main": [
+        [
+          {
+            "node": "Parse building approvals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse building approvals": {
+      "main": [
+        [
+          {
+            "node": "Save building approvals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch wage growth (ABS)": {
+      "main": [
+        [
+          {
+            "node": "Parse wage growth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse wage growth": {
+      "main": [
+        [
+          {
+            "node": "Save wage growth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch population (ABS)": {
+      "main": [
+        [
+          {
+            "node": "Parse population growth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse population growth": {
+      "main": [
+        [
+          {
+            "node": "Save population growth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch auction results": {
+      "main": [
+        [
+          {
+            "node": "Parse clearance rate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse clearance rate": {
+      "main": [
+        [
+          {
+            "node": "Save clearance rate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch vacancy rate (SQM)": {
+      "main": [
+        [
+          {
+            "node": "Parse vacancy rate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse vacancy rate": {
+      "main": [
+        [
+          {
+            "node": "Save vacancy rate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9ef44294914b7ec059e3bffd08496c73f76e223b7ff7f8383143f95968dcd31b"
+  }
+}

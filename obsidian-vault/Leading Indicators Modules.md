@@ -1,5 +1,7 @@
 # Leading Indicators Modules
 
+> **Never used, and retired with Streamlit.** These tables never held a row. The formulas are kept here in case the idea comes back; the table definitions are in `init_database()` in `legacy/property_analysis_dashboard.py`.
+
 Five tracking modules accessible from the **Leading Indicators** navigation page. Each has its own database table, scoring function, and CSV import support.
 
 ## Module Overview

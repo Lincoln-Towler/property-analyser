@@ -1,10 +1,18 @@
 import { getBtcData } from '@/lib/btc';
 import {
+  BTC_MAX_ACTIVE_FLAGS,
+  BTC_MODIFIER_CAP,
+  btcSignalForScore,
   buildLadder,
+  capModifiers,
   CATEGORY_LABEL,
+  CHANGE_LABEL,
+  changeName,
+  effectiveScore,
   groupFlags,
   levelSignalClass,
   scoreCeiling,
+  stanceClass,
   type FlagGroup,
 } from '@/lib/btc-view';
 import { fmtDate, fmtDateTimeUtc, fmtUsd } from '@/lib/format';
@@ -52,11 +60,17 @@ export default async function BtcPage() {
   const data = await getBtcData();
   if (!data) return <SetupNotice />;
 
-  const { levels, flags, latest, daily } = data;
+  const { levels, flags, latest, daily, videos, changes } = data;
+  const analysed = videos.filter((v) => v.status === 'analysed').slice(0, 3);
   const groups = groupFlags(flags);
   const inactive = flags.filter((f) => !f.is_active);
   const modifierSum = Math.round(groups.reduce((s, g) => s + g.net, 0) * 10) / 10;
+  const cappedSum = capModifiers(modifierSum);
   const activeCount = groups.reduce((s, g) => s + g.flags.length, 0);
+  // The last log row may predate today's flag changes (or the cap itself):
+  // say what the next run at the same price would score.
+  const flagsChanged = latest?.modifier_total != null && latest.modifier_total !== cappedSum;
+  const projected = latest?.base_score != null ? effectiveScore(latest.base_score, modifierSum) : null;
   const ceiling = scoreCeiling(levels, modifierSum);
   const ladder = buildLadder(levels, latest?.price_usd ?? null, latest?.current_band ?? null);
   const maxAbs = Math.max(0.1, ...groups.flatMap((g) => [Math.abs(g.bearishSum), Math.abs(g.bullishSum)]));
@@ -65,9 +79,10 @@ export default async function BtcPage() {
   return (
     <div className="space-y-8">
       <PageHeader title="BTC signal">
-        Key-level ladder and context flags maintained from research notes. Each morning the n8n brief
-        logs the signal from <code className="rounded bg-slate-800 px-1 text-slate-300">get_btc_signal()</code>:
-        the price band sets a base score, then every active flag nudges it up or down.
+        Each morning a workflow reads any new Benjamin Cowen videos and updates the context flags automatically.
+        The n8n brief then logs the signal from{' '}
+        <code className="rounded bg-slate-800 px-1 text-slate-300">get_btc_signal()</code>: the price band sets a
+        base score, and the active flags nudge it up or down, by at most ±{BTC_MODIFIER_CAP} in total.
       </PageHeader>
 
       {latest && (
@@ -105,17 +120,25 @@ export default async function BtcPage() {
               <dd className="mt-0.5 tabular-nums text-slate-200">{fmtDateTimeUtc(latest.logged_at)}</dd>
             </div>
           </dl>
-          {latest.base_score != null && (
+          {latest.base_score != null && latest.modifier_total != null && (
             <p className="mt-4 text-xs text-slate-500">
-              Band base {latest.base_score.toFixed(1)} {signed(modifierSum)} from {activeCount} active flags, clamped 1–10.
+              Band base {latest.base_score.toFixed(1)} {signed(latest.modifier_total)} from flags →{' '}
+              {latest.score.toFixed(1)}. Flags together move the score at most ±{BTC_MODIFIER_CAP}; the price band does the
+              rest.
+            </p>
+          )}
+          {flagsChanged && projected !== null && (
+            <p className="mt-1 text-xs text-amber-300/90">
+              Flags have changed since this reading: they now net {signed(modifierSum)}
+              {modifierSum !== cappedSum ? `, capped to ${signed(cappedSum)}` : ''}, so the next run at this price scores{' '}
+              {projected.toFixed(1)} ({btcSignalForScore(projected)}).
             </p>
           )}
           {priceIsIrrelevant && ceiling && (
             <p className="mt-4 rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
-              <strong>Score ceiling {ceiling.score.toFixed(1)}.</strong> With the flags netting {signed(modifierSum)}, even
-              the deepest-value band (base {Math.max(...levels.map((l) => l.base_score)).toFixed(1)}) only reaches{' '}
-              {ceiling.score.toFixed(1)} — so the signal reads <em>{ceiling.signal}</em> at every price. Retiring flags that
-              no longer apply would let price move the signal again.
+              <strong>Score ceiling {ceiling.score.toFixed(1)}.</strong> With the flags counting as {signed(cappedSum)},
+              even the deepest-value band (base {Math.max(...levels.map((l) => l.base_score)).toFixed(1)}) only reaches{' '}
+              {ceiling.score.toFixed(1)} — so the signal reads <em>{ceiling.signal}</em> at every price.
             </p>
           )}
         </Card>
@@ -138,7 +161,11 @@ export default async function BtcPage() {
       </Card>
 
       <section>
-        <SectionTitle>Key-level ladder</SectionTitle>
+        <SectionTitle
+          right={<span className="text-xs text-slate-500">chips show what each band scores today: base {signed(cappedSum)} from flags</span>}
+        >
+          Key-level ladder
+        </SectionTitle>
         <ol className="relative ml-2 border-l border-slate-700">
           {ladder.map((row) =>
             row.kind === 'price' ? (
@@ -178,9 +205,21 @@ export default async function BtcPage() {
                       </details>
                     )}
                   </div>
-                  <span className={`col-start-2 w-fit rounded px-2 py-0.5 text-xs ring-1 sm:col-start-auto ${levelSignalClass(row.level.signal)}`}>
-                    {row.level.signal.replaceAll('_', ' ')} · {row.level.base_score.toFixed(1)}
-                  </span>
+                  {(() => {
+                    const now = effectiveScore(row.level.base_score, modifierSum);
+                    const signal = btcSignalForScore(now);
+                    return (
+                      <span
+                        className="col-start-2 flex w-fit items-center gap-2 sm:col-start-auto"
+                        title={`Base ${row.level.base_score.toFixed(1)} ${signed(cappedSum)} from flags = ${now.toFixed(1)}`}
+                      >
+                        <span className={`rounded px-2 py-0.5 text-xs ring-1 ${levelSignalClass(signal)}`}>
+                          {signal.split(' / ')[0]} · {now.toFixed(1)}
+                        </span>
+                        <span className="text-[11px] tabular-nums text-slate-500">base {row.level.base_score.toFixed(1)}</span>
+                      </span>
+                    );
+                  })()}
                   <span className="col-start-2 text-xs tabular-nums text-slate-500 sm:col-start-auto sm:w-14 sm:text-right">
                     {row.distancePct === null ? '' : `${row.distancePct > 0 ? '+' : ''}${row.distancePct}%`}
                   </span>
@@ -192,8 +231,15 @@ export default async function BtcPage() {
       </section>
 
       <section className="space-y-3">
-        <SectionTitle right={<span className="text-sm tabular-nums text-slate-400">net {signed(modifierSum)}</span>}>
-          What&apos;s moving the score · {activeCount} active flags
+        <SectionTitle
+          right={
+            <span className="text-sm tabular-nums text-slate-400">
+              net {signed(modifierSum)}
+              {modifierSum !== cappedSum && <> · counts as {signed(cappedSum)} (±{BTC_MODIFIER_CAP} cap)</>}
+            </span>
+          }
+        >
+          What&apos;s moving the score · {activeCount} active flags (max {BTC_MAX_ACTIVE_FLAGS})
         </SectionTitle>
         <div className="grid gap-3 sm:grid-cols-3">
           {groups.map((g) => (
@@ -254,6 +300,69 @@ export default async function BtcPage() {
           )}
         </div>
       </section>
+
+      {analysed.length > 0 && (
+        <section>
+          <SectionTitle right={<span className="text-xs text-slate-500">AI-written summaries, not his words</span>}>
+            Latest from Benjamin Cowen
+          </SectionTitle>
+          <div className="space-y-3">
+            {analysed.map((v) => (
+              <Card key={v.video_id} as="article" tight>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <h3 className="text-sm font-medium">
+                    {v.url ? (
+                      <a href={v.url} target="_blank" rel="noopener noreferrer" className="hover:text-sky-300">
+                        {v.title}
+                      </a>
+                    ) : (
+                      v.title
+                    )}
+                  </h3>
+                  <span className="flex items-center gap-2 text-xs tabular-nums text-slate-500">
+                    {v.stance && <span className={`rounded px-2 py-0.5 ring-1 ${stanceClass(v.stance)}`}>{v.stance}</span>}
+                    {fmtDate(v.published_at)}
+                  </span>
+                </div>
+                {v.summary && <p className="mt-2 text-sm text-slate-300">{v.summary}</p>}
+                {v.key_levels && (
+                  <p className="mt-2 text-xs text-slate-400">
+                    <span className="text-slate-500">Levels:</span> {v.key_levels}
+                  </p>
+                )}
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {changes.length > 0 && (
+        <section>
+          <SectionTitle right={<span className="text-xs text-slate-500">applied automatically, newest first</span>}>
+            Recent flag changes
+          </SectionTitle>
+          <ul className="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-900/60">
+            {changes.map((c, i) => (
+              <li key={`${c.created_at}-${c.flag_key}-${i}`} className="grid grid-cols-[1fr_auto] gap-x-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm">
+                    <span className="text-slate-400">{CHANGE_LABEL[c.action] ?? c.action}:</span> {changeName(c, flags)}
+                    {c.action !== 'retire' && c.score_modifier != null && (
+                      <span className={`ml-2 tabular-nums ${c.score_modifier < 0 ? 'text-red-400' : c.score_modifier > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                        {signed(c.score_modifier)}
+                      </span>
+                    )}
+                  </p>
+                  {c.reason && <p className="mt-0.5 text-xs text-slate-400">{c.reason}</p>}
+                  {c.status === 'failed' && <p className="mt-0.5 text-xs text-red-300">Not applied: {c.apply_note}</p>}
+                  {c.status === 'applied' && c.apply_note && <p className="mt-0.5 text-xs text-amber-300/90">{c.apply_note}</p>}
+                </div>
+                <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">{fmtDate(c.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <DataStamp fetchedAt={data.fetchedAt} />
     </div>

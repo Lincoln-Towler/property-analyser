@@ -15,8 +15,8 @@ import sqlite3
 import sys
 from datetime import date, datetime, timedelta
 
-# repo root (this file lives at web/tests/)
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+# the retired Streamlit app lives in legacy/ (this file lives at web/tests/)
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "legacy"))
 import property_analysis_dashboard as dash
 
 TODAY = date.today()

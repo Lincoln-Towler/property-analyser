@@ -1,5 +1,57 @@
 # Changelog
 
+## November 2026 - Data pipelines, BTC review loop, UI rework
+
+### Data pipelines (2 Nov, see [[Data Pipelines Handoff 2026-11-02]])
+- **Diagnosis:** only the cash rate was still updating. The credit branch requested an RBA page that usually isn't published yet, and its 404 stopped every later branch. Several parsers and URLs were outdated, and the cash-rate "Update row" node was overwriting the unemployment row.
+- **Economic Indicators workflow fixed:** new ABS API host, correct series (seasonally adjusted unemployment, housing credit), cash-rate parser, credit-page fallback, isolated failures, range checks; "Update row" nodes removed.
+- **Data backfilled and cleaned** after a full backup (migration `0007`): ~45 sourced rows, official figures aligned, every series dated first-of-period with one point per period.
+- **Location data:** new SQM workflow replaces Hotspotting for vacancy, yield, growth and asking price on all 11 locations.
+- **BTC:** `btc_video_analysis` and `btc_flag_suggestions` tables with approve-to-apply, supersede and 20-flag-limit triggers; `get_btc_signal` caps the flags' combined effect at ±2 (migrations `0008`–`0010`). First review cycle: 11 suggestions applied, 8 rejected.
+- **Repo:** workflow source, tests and importable JSON committed under `n8n/`; `CLAUDE.md` added for future Claude sessions.
+
+### Close-out (2 Nov, see [[Handoff 2026-11-02 (close-out)]])
+- **No more approvals:** BTC flag changes apply as soon as the workflow saves them (migration `0014`). `btc_flag_suggestions` stays as the log. When 20 flags are active, the stalest retires to make room.
+- **Website can't change anything:** the public key and signed-up users lost every write permission (migration `0015`). Tested by attempting writes with the public key; all were refused. The `/admin` and approval-screen plans are dropped.
+- **BTC flags 36 → 19:** applied the 13 waiting suggestions and retired 12 duplicates or stale flags (`0012`). The raw total went from −6.7 to −3.4, which still caps at −2, so scores didn't move.
+- **Price bands 16 → 14 (`0013`):** a price below every band now gets the deepest band's score instead of reading SELL; the $38K and $39K rows merged; $57K and $42K put in order; three labels refreshed.
+- **Site:** `/btc` shows Cowen summaries and recent flag changes; `/audit` has an automation health panel; Locations calls its price an asking price and shows older readings' dates.
+- **Legacy rows stay:** the plan to delete odd `property_data` rows was dropped, as it contradicted the rule against deleting anomalies.
+- **Repo:** Streamlit and its files moved to `legacy/`, which stops the old deployed app; missing migration records added; docs brought up to date.
+
+### Site UI rework (PR #26)
+- Mobile nav no longer scrolls the page sideways; active page highlighted.
+- Charts use real time axes, straight or stepped lines, shaded target zones and correctly labelled warning lines.
+- Dashboard: gauge marker, zoned score history, coloured pillars, tile sparklines, commentary columns. Indicators grouped by pillar.
+- BTC page: price against key levels, price ladder, flags grouped by category. Locations, Audit and Cycle tidied; contradictory cycle advice fixed.
+## August 2026 - Data quality sweep + Location Analysis
+
+### `/locations` — Location Analysis rebuilt
+- Deferred during the rebuild because `property_data` was stale; revived once an Aug 2026 snapshot landed for all locations
+- Regional divergence summary, all-locations ranked table, head-to-head comparison (two selectors, metric table, dual median-price chart, recommendation)
+- `locationScore()` ported from `calculate_location_score()`; `sales_volume` declares no winner (readings mix geographic scope and period)
+
+### Outlier audit — 31 findings, zero deletions
+- Adversarial review **rejected every proposed deletion**. Several accusations were wrong: Brisbane's −30.93% growth was called impossible by comparing two non-overlapping windows; Sydney's 19.83% vacancy sits inside the project's own plausibility band and comes from a sub-market sample (sales_volume 13, DOM 106)
+- Standing rule recorded in `CLAUDE.md`: **surface anomalies, never delete them**
+- `lib/property-audit.ts` + `/audit` section: readings to verify, duplicate snapshots, metrics missing from the newest snapshot
+- Only data touched all month: the four n8n scraper zeros deleted in July
+
+### Scoring honesty (no score changes)
+- `getWindowContext` — the two-point trend rule called auction clearance "stable" while it fell 17.2% over 6 readings (5 of 5 consecutive declines). The contradiction is now shown on `/indicators`; scoring and the parity suite untouched
+- **Weight at risk** on `/audit`: ~43% of the score rides on indicators that cannot move; `household_debt_gdp` alone is 18.5% off one 404-day-old reading
+- **Cadence flags**: quarterly indicators can *never* satisfy a 3-month trend or 6-month volatility window — proven by test, so `/audit` no longer implies a backfill would help
+- Zero-valued readings now count as real values in `locationScore`, matching `calculateRegionalDivergence` (the Python's `if x and x > n` was a None-check, not a decision about zero)
+
+### Data-layer fixes
+- Building-approvals annualisation no longer emits partial-window points (a widening window alone drew a fake uptrend)
+- `getSiteData` now records query errors: a denied read (RLS) and an empty table looked identical, so `/locations` could report "no data" when the query had actually failed
+- Migration `0006`: plausibility guard — hard CHECK on manual entry, skip-trigger on the n8n feed
+- Household debt series identified as **ABS 5232.0** (113.x family, not IMF 108–112 or CEIC 119–120); no figures inserted, `supabase/backfill-indicator.sql` records which family to use
+
+### `CLAUDE.md` added
+Project context for future sessions: deployment flow, the never-delete-data rule, parity discipline, decisions already made, open issues.
+
 ## June/July 2026 - Rebuild Phase 1 (Next.js)
 
 ### Rebuild kickoff — engine port + public site

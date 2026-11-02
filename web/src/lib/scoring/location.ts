@@ -114,7 +114,7 @@ export function scoreAllLocations(rows: PropertyPoint[]): ScoredLocation[] {
 }
 
 export const METRIC_LABELS: Record<string, string> = {
-  median_price: 'Median Price',
+  median_price: 'Asking Price (3-bed)',
   annual_growth: '12-Month Growth',
   rental_yield: 'Rental Yield',
   vacancy_rate: 'Vacancy Rate',
