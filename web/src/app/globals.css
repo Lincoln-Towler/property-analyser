@@ -6,4 +6,20 @@
 
 body {
   @apply bg-slate-950 text-slate-100 antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+/* Collapsible sections: rotate the marker when open. */
+details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+details > summary .chevron {
+  transition: transform 150ms ease;
+}
+details[open] > summary .chevron {
+  transform: rotate(90deg);
 }

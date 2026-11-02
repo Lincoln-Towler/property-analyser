@@ -114,7 +114,7 @@ export function calculateVolatilityPenalty(
   return [0, stdDev, 'low'];
 }
 
-function signalForScore(finalScore: number): string {
+export function signalForScore(finalScore: number): string {
   if (finalScore >= 75) return '🟢 Strong Buy';
   if (finalScore >= 60) return '🟢 Buy';
   if (finalScore >= 50) return '🟡 Moderate Buy';
