@@ -11,6 +11,7 @@ Lincoln's personal Australian property-market analyser, plus a separate Bitcoin 
 - **Feeds:** n8n workflows on Lincoln's self-hosted n8n (TrueNAS, behind Cloudflare Access). Cloud sessions can't reach it, so workflow changes are delivered as JSON files for him to import.
 - **Legacy:** `property_analysis_dashboard.py` (Streamlit). This is the reference implementation the web scoring engine is parity-tested against. Don't change scoring in it.
 - **Notes:** `obsidian-vault/` holds Lincoln's notes: architecture, `Changelog.md`, dated handoff notes and the cutover checklist. Add a changelog entry for notable changes.
+- **In-flight work:** read the newest `obsidian-vault/*Handoff*.md` before starting. It records decisions waiting on Lincoln that aren't visible in the code.
 
 ## Commands
 
