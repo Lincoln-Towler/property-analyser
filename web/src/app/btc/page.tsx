@@ -1,7 +1,12 @@
 import { getBtcData } from '@/lib/btc';
 import {
+  BTC_MAX_ACTIVE_FLAGS,
+  BTC_MODIFIER_CAP,
+  btcSignalForScore,
   buildLadder,
+  capModifiers,
   CATEGORY_LABEL,
+  effectiveScore,
   groupFlags,
   levelSignalClass,
   scoreCeiling,
@@ -56,7 +61,12 @@ export default async function BtcPage() {
   const groups = groupFlags(flags);
   const inactive = flags.filter((f) => !f.is_active);
   const modifierSum = Math.round(groups.reduce((s, g) => s + g.net, 0) * 10) / 10;
+  const cappedSum = capModifiers(modifierSum);
   const activeCount = groups.reduce((s, g) => s + g.flags.length, 0);
+  // The last log row may predate today's flag approvals (or the cap itself):
+  // say what the next run at the same price would score.
+  const flagsChanged = latest?.modifier_total != null && latest.modifier_total !== cappedSum;
+  const projected = latest?.base_score != null ? effectiveScore(latest.base_score, modifierSum) : null;
   const ceiling = scoreCeiling(levels, modifierSum);
   const ladder = buildLadder(levels, latest?.price_usd ?? null, latest?.current_band ?? null);
   const maxAbs = Math.max(0.1, ...groups.flatMap((g) => [Math.abs(g.bearishSum), Math.abs(g.bullishSum)]));
@@ -105,17 +115,25 @@ export default async function BtcPage() {
               <dd className="mt-0.5 tabular-nums text-slate-200">{fmtDateTimeUtc(latest.logged_at)}</dd>
             </div>
           </dl>
-          {latest.base_score != null && (
+          {latest.base_score != null && latest.modifier_total != null && (
             <p className="mt-4 text-xs text-slate-500">
-              Band base {latest.base_score.toFixed(1)} {signed(modifierSum)} from {activeCount} active flags, clamped 1–10.
+              Band base {latest.base_score.toFixed(1)} {signed(latest.modifier_total)} from flags →{' '}
+              {latest.score.toFixed(1)}. Flags together move the score at most ±{BTC_MODIFIER_CAP}; the price band does the
+              rest.
+            </p>
+          )}
+          {flagsChanged && projected !== null && (
+            <p className="mt-1 text-xs text-amber-300/90">
+              Flags have changed since this reading: they now net {signed(modifierSum)}
+              {modifierSum !== cappedSum ? `, capped to ${signed(cappedSum)}` : ''}, so the next run at this price scores{' '}
+              {projected.toFixed(1)} ({btcSignalForScore(projected)}).
             </p>
           )}
           {priceIsIrrelevant && ceiling && (
             <p className="mt-4 rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
-              <strong>Score ceiling {ceiling.score.toFixed(1)}.</strong> With the flags netting {signed(modifierSum)}, even
-              the deepest-value band (base {Math.max(...levels.map((l) => l.base_score)).toFixed(1)}) only reaches{' '}
-              {ceiling.score.toFixed(1)} — so the signal reads <em>{ceiling.signal}</em> at every price. Retiring flags that
-              no longer apply would let price move the signal again.
+              <strong>Score ceiling {ceiling.score.toFixed(1)}.</strong> With the flags counting as {signed(cappedSum)},
+              even the deepest-value band (base {Math.max(...levels.map((l) => l.base_score)).toFixed(1)}) only reaches{' '}
+              {ceiling.score.toFixed(1)} — so the signal reads <em>{ceiling.signal}</em> at every price.
             </p>
           )}
         </Card>
@@ -138,7 +156,11 @@ export default async function BtcPage() {
       </Card>
 
       <section>
-        <SectionTitle>Key-level ladder</SectionTitle>
+        <SectionTitle
+          right={<span className="text-xs text-slate-500">chips show what each band scores today: base {signed(cappedSum)} from flags</span>}
+        >
+          Key-level ladder
+        </SectionTitle>
         <ol className="relative ml-2 border-l border-slate-700">
           {ladder.map((row) =>
             row.kind === 'price' ? (
@@ -178,9 +200,21 @@ export default async function BtcPage() {
                       </details>
                     )}
                   </div>
-                  <span className={`col-start-2 w-fit rounded px-2 py-0.5 text-xs ring-1 sm:col-start-auto ${levelSignalClass(row.level.signal)}`}>
-                    {row.level.signal.replaceAll('_', ' ')} · {row.level.base_score.toFixed(1)}
-                  </span>
+                  {(() => {
+                    const now = effectiveScore(row.level.base_score, modifierSum);
+                    const signal = btcSignalForScore(now);
+                    return (
+                      <span
+                        className="col-start-2 flex w-fit items-center gap-2 sm:col-start-auto"
+                        title={`Base ${row.level.base_score.toFixed(1)} ${signed(cappedSum)} from flags = ${now.toFixed(1)}`}
+                      >
+                        <span className={`rounded px-2 py-0.5 text-xs ring-1 ${levelSignalClass(signal)}`}>
+                          {signal.split(' / ')[0]} · {now.toFixed(1)}
+                        </span>
+                        <span className="text-[11px] tabular-nums text-slate-500">base {row.level.base_score.toFixed(1)}</span>
+                      </span>
+                    );
+                  })()}
                   <span className="col-start-2 text-xs tabular-nums text-slate-500 sm:col-start-auto sm:w-14 sm:text-right">
                     {row.distancePct === null ? '' : `${row.distancePct > 0 ? '+' : ''}${row.distancePct}%`}
                   </span>
@@ -192,9 +226,23 @@ export default async function BtcPage() {
       </section>
 
       <section className="space-y-3">
-        <SectionTitle right={<span className="text-sm tabular-nums text-slate-400">net {signed(modifierSum)}</span>}>
+        <SectionTitle
+          right={
+            <span className="text-sm tabular-nums text-slate-400">
+              net {signed(modifierSum)}
+              {modifierSum !== cappedSum && <> · counts as {signed(cappedSum)} (±{BTC_MODIFIER_CAP} cap)</>}
+            </span>
+          }
+        >
           What&apos;s moving the score · {activeCount} active flags
         </SectionTitle>
+        {activeCount > BTC_MAX_ACTIVE_FLAGS && (
+          <p className="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+            {activeCount} flags are active against a limit of {BTC_MAX_ACTIVE_FLAGS}. New flags can&apos;t be added until{' '}
+            {activeCount - BTC_MAX_ACTIVE_FLAGS + 1} are retired — approve retirements in{' '}
+            <code className="rounded bg-slate-800 px-1">btc_flag_suggestions</code>.
+          </p>
+        )}
         <div className="grid gap-3 sm:grid-cols-3">
           {groups.map((g) => (
             <CategorySummary key={g.category} group={g} maxAbs={maxAbs} />

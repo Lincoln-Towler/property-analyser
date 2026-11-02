@@ -3,6 +3,23 @@
 
 import type { BtcContextFlag, BtcKeyLevel } from './btc';
 
+/** get_btc_signal() caps the flags' combined effect at ±this many points
+ *  (migration 0010). Keep in step with the SQL and btc_build_request.js. */
+export const BTC_MODIFIER_CAP = 2;
+
+/** Hard limit on active flags, enforced by apply_btc_flag_suggestion(). */
+export const BTC_MAX_ACTIVE_FLAGS = 20;
+
+/** The flags' total as the score uses it: capped at ±BTC_MODIFIER_CAP. */
+export function capModifiers(raw: number): number {
+  return Math.round(Math.max(-BTC_MODIFIER_CAP, Math.min(BTC_MODIFIER_CAP, raw)) * 10) / 10;
+}
+
+/** Score a band produces with a given (raw) flag total — base + capped flags, clamped 1–10. */
+export function effectiveScore(baseScore: number, rawModifier: number): number {
+  return Math.max(1, Math.min(10, Math.round((baseScore + capModifiers(rawModifier)) * 10) / 10));
+}
+
 /** Same bands as get_btc_signal(): score → signal text. */
 export function btcSignalForScore(score: number): string {
   if (score >= 9) return 'MAX BUY';
@@ -16,13 +33,12 @@ export function btcSignalForScore(score: number): string {
 
 /**
  * The best score any price could produce with today's flags: the highest
- * band base plus the net modifier, clamped 1–10 like get_btc_signal().
+ * band base plus the capped flag total, clamped 1–10 like get_btc_signal().
  * When this is still a sell, price no longer matters — the flags decide.
  */
-export function scoreCeiling(levels: BtcKeyLevel[], modifierSum: number): { score: number; signal: string } | null {
+export function scoreCeiling(levels: BtcKeyLevel[], rawModifier: number): { score: number; signal: string } | null {
   if (!levels.length) return null;
-  const best = Math.max(...levels.map((l) => l.base_score));
-  const score = Math.max(1, Math.min(10, Math.round((best + modifierSum) * 10) / 10));
+  const score = effectiveScore(Math.max(...levels.map((l) => l.base_score)), rawModifier);
   return { score, signal: btcSignalForScore(score) };
 }
 
@@ -97,18 +113,22 @@ export const CATEGORY_LABEL: Record<string, string> = {
   OTHER: 'Other',
 };
 
-/** Tailwind classes for a key-level signal chip, sell → max buy. */
+/** Tailwind classes for a signal chip, sell → max buy. Accepts both the
+ *  stored level labels ('LIGHT_BUY') and get_btc_signal() text
+ *  ('CAUTION / REDUCE'). */
 export function levelSignalClass(signal: string): string {
-  switch (signal) {
+  switch (signal.replace(/_/g, ' ').split(' / ')[0]) {
     case 'SELL':
       return 'bg-red-500/15 text-red-300 ring-red-500/30';
+    case 'CAUTION':
+      return 'bg-orange-500/15 text-orange-300 ring-orange-500/30';
     case 'HOLD':
       return 'bg-amber-500/15 text-amber-300 ring-amber-500/30';
-    case 'LIGHT_BUY':
+    case 'LIGHT BUY':
       return 'bg-yellow-500/15 text-yellow-200 ring-yellow-500/30';
     case 'BUY':
       return 'bg-lime-500/15 text-lime-300 ring-lime-500/30';
-    case 'STRONG_BUY':
+    case 'STRONG BUY':
       return 'bg-green-500/15 text-green-300 ring-green-500/30';
     default:
       return 'bg-emerald-500/20 text-emerald-300 ring-emerald-500/40';

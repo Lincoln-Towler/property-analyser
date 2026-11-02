@@ -14,7 +14,16 @@ import { signalForScore } from '../src/lib/scoring/engine';
 import { INDICATORS_CONFIG } from '../src/lib/scoring/config';
 import { indicatorTargetText, statusPhrase, targetBand, warningLine } from '../src/lib/scoring/ui-helpers';
 import { groupByPublisher, sourcePublisher } from '../src/lib/sources';
-import { btcSignalForScore, buildLadder, groupFlags, scoreCeiling } from '../src/lib/btc-view';
+import {
+  BTC_MODIFIER_CAP,
+  btcSignalForScore,
+  buildLadder,
+  capModifiers,
+  effectiveScore,
+  groupFlags,
+  levelSignalClass,
+  scoreCeiling,
+} from '../src/lib/btc-view';
 import { andersonState } from '../src/lib/scoring/anderson';
 import type { BtcContextFlag, BtcKeyLevel } from '../src/lib/btc';
 
@@ -165,9 +174,27 @@ describe('btc view', () => {
     expect(btcSignalForScore(2.49)).toBe('SELL / TAKE PROFIT');
   });
 
-  it('finds the score ceiling when flags swamp every band', () => {
-    expect(scoreCeiling([level(31750, 9.8), level(83000, 2)], -7.5)).toEqual({ score: 2.3, signal: 'SELL / TAKE PROFIT' });
+  it('caps the flags at ±2 like get_btc_signal()', () => {
+    expect(BTC_MODIFIER_CAP).toBe(2);
+    expect(capModifiers(-6.7)).toBe(-2);
+    expect(capModifiers(2.4)).toBe(2);
+    expect(capModifiers(-1.3)).toBe(-1.3);
+    // $77.7K sits in the $75K band (base 3.5): 3.5 - 2 = 1.5, not 3.5 - 6.7
+    expect(effectiveScore(3.5, -6.7)).toBe(1.5);
+    expect(effectiveScore(2, -6.7)).toBe(1); // clamped at 1
+    expect(effectiveScore(9.8, 3)).toBe(10); // clamped at 10
+  });
+
+  it('computes the score ceiling with the capped flag total', () => {
+    // Before the cap, -7.5 left even the best band at 2.3 (SELL at every price)
+    expect(scoreCeiling([level(31750, 9.8), level(83000, 2)], -7.5)).toEqual({ score: 7.8, signal: 'STRONG BUY' });
     expect(scoreCeiling([level(31750, 9.8)], 0)).toEqual({ score: 9.8, signal: 'MAX BUY' });
+  });
+
+  it('colours chips for both stored labels and signal text', () => {
+    expect(levelSignalClass('CAUTION / REDUCE')).toContain('orange');
+    expect(levelSignalClass('SELL / TAKE PROFIT')).toBe(levelSignalClass('SELL'));
+    expect(levelSignalClass('LIGHT BUY')).toBe(levelSignalClass('LIGHT_BUY'));
   });
 
   it('slots the current price into the ladder', () => {
