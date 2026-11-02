@@ -1,73 +1,95 @@
 'use client';
 
-// Daily BTC price + signal score history (client component — Recharts needs
-// the DOM). Price on the left axis, 1–10 score on the right.
+// Daily BTC price against the key-level ladder (client component — Recharts
+// needs the DOM). The current band (support → resistance) is shaded and
+// every key level near the price range is drawn as a reference line, so the
+// chart shows where price sits in the framework rather than a score that
+// has not moved.
 
 import {
-  ComposedChart,
+  LineChart,
   Line,
   XAxis,
   YAxis,
   Tooltip,
+  ReferenceArea,
+  ReferenceLine,
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
+import { COLORS, TOOLTIP_STYLE, AXIS_TICK } from '@/lib/theme';
+import { fmtDate, fmtMoneyTick, fmtUsd, isoToTs, niceScale, timeAxis, tsToIso } from '@/lib/format';
 
 export interface BtcChartPoint {
   date: string;
   price: number;
-  score: number;
 }
 
-export function BtcHistoryChart({ points }: { points: BtcChartPoint[] }) {
+export function BtcHistoryChart({
+  points,
+  levels,
+  support,
+  resistance,
+}: {
+  points: BtcChartPoint[];
+  levels: number[];
+  support: number | null;
+  resistance: number | null;
+}) {
+  const data = points.map((p) => ({ t: isoToTs(p.date), price: p.price }));
+  const axis = timeAxis(points.map((p) => p.date), 6);
+  const prices = points.map((p) => p.price);
+  const lo = Math.min(...prices);
+  const hi = Math.max(...prices);
+  // Levels within ~8% of the traded range; anything further would only
+  // squash the price line.
+  const visible = [...new Set(levels)].filter((l) => l >= lo * 0.92 && l <= hi * 1.08);
+  const y = niceScale([lo, hi, ...visible], 6);
+
   return (
-    <div className="h-64 w-full">
+    <div className="h-72 w-full">
       <ResponsiveContainer>
-        <ComposedChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-          <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
-          <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 11 }} tickMargin={6} />
-          <YAxis
-            yAxisId="price"
-            tick={{ fill: '#94a3b8', fontSize: 11 }}
-            width={56}
-            domain={['auto', 'auto']}
-            tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
+        <LineChart data={data} margin={{ top: 8, right: 56, bottom: 0, left: 0 }}>
+          <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" vertical={false} />
+          {support !== null && resistance !== null && (
+            <ReferenceArea y1={support} y2={resistance} fill={COLORS.btc} fillOpacity={0.08} stroke="none" />
+          )}
+          {visible.map((level) => {
+            const isBand = level === support || level === resistance;
+            return (
+              <ReferenceLine
+                key={level}
+                y={level}
+                stroke={isBand ? COLORS.btc : '#475569'}
+                strokeOpacity={isBand ? 0.9 : 0.7}
+                strokeDasharray={isBand ? '6 3' : '2 4'}
+                label={{
+                  value: fmtMoneyTick(level),
+                  position: 'right',
+                  fill: isBand ? COLORS.btc : COLORS.axis,
+                  fontSize: 10,
+                }}
+              />
+            );
+          })}
+          <XAxis
+            dataKey="t"
+            type="number"
+            scale="time"
+            domain={axis.domain}
+            ticks={axis.ticks}
+            tickFormatter={axis.format}
+            tick={AXIS_TICK}
+            tickMargin={6}
           />
-          <YAxis
-            yAxisId="score"
-            orientation="right"
-            domain={[0, 10]}
-            tick={{ fill: '#4ade80', fontSize: 11 }}
-            width={32}
-          />
+          <YAxis tick={AXIS_TICK} width={52} domain={y.domain} ticks={y.ticks} tickFormatter={fmtMoneyTick} />
           <Tooltip
-            contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8 }}
-            labelStyle={{ color: '#cbd5e1' }}
-            formatter={(value: number, name: string) =>
-              name === 'price'
-                ? [`$${value.toLocaleString('en-US')}`, 'price']
-                : [value.toFixed(1), 'score /10']
-            }
+            {...TOOLTIP_STYLE}
+            labelFormatter={(t: number) => fmtDate(tsToIso(t))}
+            formatter={(value: number) => [fmtUsd(value), 'price']}
           />
-          <Line
-            yAxisId="price"
-            type="monotone"
-            dataKey="price"
-            stroke="#f59e0b"
-            strokeWidth={2}
-            dot={false}
-            isAnimationActive={false}
-          />
-          <Line
-            yAxisId="score"
-            type="monotone"
-            dataKey="score"
-            stroke="#4ade80"
-            strokeWidth={2}
-            dot={false}
-            isAnimationActive={false}
-          />
-        </ComposedChart>
+          <Line type="linear" dataKey="price" stroke={COLORS.btc} strokeWidth={2} dot={false} isAnimationActive={false} />
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );
