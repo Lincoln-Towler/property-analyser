@@ -13,7 +13,7 @@ The move from Streamlit to the Next.js site. Only the last steps are left. Backg
 
 ## Left to do
 
-Claude can't do these, because they need your logins and a new password. Only step 1 matters.
+Claude can't do these, because they need your logins and a new password.
 
 ### 1. Rotate the database password
 
@@ -23,9 +23,9 @@ The old password is stored in Streamlit Cloud's secrets, so it should be treated
 - [ ] Click **Reset database password**, then **Generate a password**, and save it in your password manager
 - [ ] The next morning, check that `/audit` still says everything ran on schedule
 
-### 2. Optional: delete the Streamlit app
+### 2. Delete the Streamlit app
 
-It's already stopped, because its code moved to `legacy/`, and after step 1 it can't reach the database anyway. Deleting it only removes a dead error page and the old secret. The code stays in `legacy/` either way.
+Streamlit is dropped (Lincoln's decision, 3 Nov). It's already stopped, because its code moved to `legacy/`, so this only clears away a dead error page and the old secret.
 
 - [ ] Open [share.streamlit.io](https://share.streamlit.io) and sign in
 - [ ] Find `property-analyser`, click **⋮**, then **Delete**

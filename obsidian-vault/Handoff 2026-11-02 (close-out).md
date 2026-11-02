@@ -28,7 +28,7 @@ These are the limits on a change nobody reviews:
 
 See [[Cutover Checklist]] for the steps.
 
-1. Rotate the database password. Deleting the Streamlit app is optional: it's already stopped, and this cuts it off for good.
+1. Rotate the database password, and delete the Streamlit app. It's already stopped, so deleting it only clears away a dead page.
 2. Optional: paste `supabase/migrations/0016_drop_empty_legacy_tables.sql` into the SQL Editor. Claude's attempt was stopped by a safety check on bulk deletes.
 3. Copy the updated launcher `index.html` to the NAS in Finder (see the launcher's `CLAUDE.md`). Claude and the Terminal panel can't reach that share.
 4. Optional: re-import `n8n/workflows/Cowen Videos - BTC Flag Suggestions.json`. It tells Claude there's no human check, so it should make fewer marginal changes, and saves retirements first. The live workflow works without it.
@@ -39,6 +39,8 @@ The score went from 44.46 to 43.02 because of that day's data cleanup, not the m
 
 ## Decisions made
 
+- **Streamlit is dropped (3 Nov).** Its code stays in `legacy/` only because the parity fixtures were generated from it.
+- **Site design waits (3 Nov).** Work on the Vercel UI comes later, once the data side is proven to work.
 - **The BTC flags stay (3 Nov).** Replacing them with one number per video was considered and declined. It's known and accepted that the ±2 cap usually absorbs a single flag change.
 - **No approval process, and nothing writable on the website.** Lincoln's call. The approval screen and `/admin` page are off the table.
 - **Legacy `property_data` rows stay,** flagged on `/audit`, under the rule against deleting anomalies.
