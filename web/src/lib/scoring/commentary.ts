@@ -61,29 +61,42 @@ function latestValue(series: SeriesMap, name: string): number | null {
   return [...points].sort((a, b) => (a.date < b.date ? 1 : -1))[0].value;
 }
 
+export interface CommentaryFactor {
+  key: string;
+  display: string;
+  note: string;
+}
+
+export interface CommentaryParts {
+  bullish: CommentaryFactor[];
+  bearish: CommentaryFactor[];
+  neutral: CommentaryFactor[];
+  cyclePosition: number;
+  phase: string;
+  recommendation: string;
+}
+
 /**
- * Build the commentary markdown.
- * `score`/`signal` come from calculateMarketScoreV3 (pass null when unavailable).
- * `cycleStart` is parameterised so the parity tests can pin it to the old
- * app's 2011 anchor while production uses CYCLE_START_YEAR.
+ * The commentary's content as data — the dashboard lays it out as columns,
+ * generateAutoCommentary renders it as markdown. One source, so the two
+ * views can never disagree.
  */
-export function generateAutoCommentary(
+export function buildCommentaryParts(
   series: SeriesMap,
   score: number | null,
-  signal: string | null,
   now: Date,
   cycleStart: number = CYCLE_START_YEAR,
-): string {
-  const bullish: string[] = [];
-  const bearish: string[] = [];
-  const neutral: string[] = [];
+): CommentaryParts {
+  const bullish: CommentaryFactor[] = [];
+  const bearish: CommentaryFactor[] = [];
+  const neutral: CommentaryFactor[] = [];
 
   for (const [key, cfg] of Object.entries(INDICATORS_CONFIG)) {
     const value = latestValue(series, key);
     if (value === null) continue;
     const [category, note] = classifyIndicator(value, cfg);
     const display = cfg.display_name ?? key.replace(/_/g, ' ');
-    const entry = `- **${display}**: ${note}`;
+    const entry = { key, display, note };
     if (category === 'bullish') bullish.push(entry);
     else if (category === 'bearish') bearish.push(entry);
     else neutral.push(entry);
@@ -109,6 +122,28 @@ export function generateAutoCommentary(
   } else {
     recommendation = 'Downturn risk high — hold cash, wait for clearer bottom signals.';
   }
+
+  return { bullish, bearish, neutral, cyclePosition, phase, recommendation };
+}
+
+/**
+ * Build the commentary markdown.
+ * `score`/`signal` come from calculateMarketScoreV3 (pass null when unavailable).
+ * `cycleStart` is parameterised so the parity tests can pin it to the old
+ * app's 2011 anchor while production uses CYCLE_START_YEAR.
+ */
+export function generateAutoCommentary(
+  series: SeriesMap,
+  score: number | null,
+  signal: string | null,
+  now: Date,
+  cycleStart: number = CYCLE_START_YEAR,
+): string {
+  const { cyclePosition, phase, recommendation, ...factors } = buildCommentaryParts(series, score, now, cycleStart);
+  const toLine = (f: CommentaryFactor) => `- **${f.display}**: ${f.note}`;
+  const bearish = factors.bearish.map(toLine);
+  const bullish = factors.bullish.map(toLine);
+  const neutral = factors.neutral.map(toLine);
 
   const lines: string[] = ['**Current Market Assessment**', ''];
   if (score !== null) {

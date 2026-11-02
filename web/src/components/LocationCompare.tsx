@@ -22,6 +22,8 @@ import {
   formatMetric,
   type ScoredLocation,
 } from '@/lib/scoring/location';
+import { COLORS, LOCATION_GOOD, TOOLTIP_STYLE, AXIS_TICK, scoreTone } from '@/lib/theme';
+import { fmtDate, fmtMoneyTick, fmtMonthYear, isoToTs, niceScale, timeAxis, tsToIso } from '@/lib/format';
 
 export interface PriceSeriesPoint {
   date: string;
@@ -37,22 +39,22 @@ const COMPARE_METRICS = [
   'sales_volume',
 ];
 
-function scoreColor(score: number): string {
-  if (score >= 70) return 'text-emerald-400';
-  if (score >= 40) return 'text-amber-400';
-  return 'text-red-400';
-}
-
 function ScoreBar({ score }: { score: number }) {
   return (
     <div className="h-2 w-full rounded-full bg-slate-800">
-      <div
-        className={`h-2 rounded-full ${
-          score >= 70 ? 'bg-emerald-500' : score >= 40 ? 'bg-amber-500' : 'bg-red-500'
-        }`}
-        style={{ width: `${score}%` }}
-      />
+      <div className={`h-2 rounded-full ${scoreTone(score, LOCATION_GOOD).bar}`} style={{ width: `${score}%` }} />
     </div>
+  );
+}
+
+/** A reading's date, shown only when it is older than the location's
+ *  newest snapshot — otherwise every cell would repeat the same date. */
+function StaleDate({ date, latest }: { date: string | undefined; latest: string | null }) {
+  if (!date || date === latest) return null;
+  return (
+    <span className="ml-2 whitespace-nowrap text-xs text-amber-400/80" title={`Reading from ${fmtDate(date)}`}>
+      ({fmtMonthYear(date)})
+    </span>
   );
 }
 
@@ -76,7 +78,14 @@ export function LocationCompare({
   // Only keep dates where at least one of the two has a price reading
   const trend = priceSeries
     .filter((p) => p[left] !== undefined || p[right] !== undefined)
-    .map((p) => ({ date: p.date, [left]: p[left], [right]: p[right] }));
+    .map((p) => ({ t: isoToTs(p.date), [left]: p[left], [right]: p[right] }));
+  const axis = timeAxis(
+    priceSeries.filter((p) => p[left] !== undefined || p[right] !== undefined).map((p) => p.date),
+  );
+  const yScale = niceScale(
+    trend.flatMap((p) => [p[left], p[right]]).filter((v): v is number => typeof v === 'number'),
+    4,
+  );
 
   return (
     <div className="space-y-6">
@@ -119,16 +128,14 @@ export function LocationCompare({
             className="rounded-xl border border-slate-800 bg-slate-900/60 p-5"
           >
             <p className="text-sm text-slate-400">{loc.location}</p>
-            <p className={`text-3xl font-semibold tabular-nums ${scoreColor(loc.score)}`}>
+            <p className={`text-3xl font-semibold tabular-nums ${scoreTone(loc.score, LOCATION_GOOD).text}`}>
               {loc.score}
               <span className="text-base font-normal text-slate-500">/100</span>
             </p>
             <div className="mt-3">
               <ScoreBar score={loc.score} />
             </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Latest data: {loc.latestDate ?? 'none'}
-            </p>
+            <p className="mt-2 text-xs text-slate-500">Latest data: {loc.latestDate ? fmtDate(loc.latestDate) : 'none'}</p>
           </div>
         ))}
       </div>
@@ -179,9 +186,7 @@ export function LocationCompare({
                     }`}
                   >
                     {formatMetric(metric, va)}
-                    {a.metrics[metric] && (
-                      <span className="ml-2 text-xs text-slate-500">{a.metrics[metric]!.date}</span>
-                    )}
+                    <StaleDate date={a.metrics[metric]?.date} latest={a.latestDate} />
                   </td>
                   <td
                     className={`px-4 py-3 tabular-nums ${
@@ -189,9 +194,7 @@ export function LocationCompare({
                     }`}
                   >
                     {formatMetric(metric, vb)}
-                    {b.metrics[metric] && (
-                      <span className="ml-2 text-xs text-slate-500">{b.metrics[metric]!.date}</span>
-                    )}
+                    <StaleDate date={b.metrics[metric]?.date} latest={b.latestDate} />
                   </td>
                 </tr>
               );
@@ -208,34 +211,40 @@ export function LocationCompare({
           <div className="h-64 w-full">
             <ResponsiveContainer>
               <LineChart data={trend} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
-                <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis
-                  tick={{ fill: '#94a3b8', fontSize: 11 }}
-                  width={62}
-                  domain={['auto', 'auto']}
-                  tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}K`}
+                <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="t"
+                  type="number"
+                  scale="time"
+                  domain={axis.domain}
+                  ticks={axis.ticks}
+                  tickFormatter={axis.format}
+                  tick={AXIS_TICK}
+                  tickMargin={6}
                 />
+                <YAxis tick={AXIS_TICK} width={56} domain={yScale.domain} ticks={yScale.ticks} tickFormatter={fmtMoneyTick} />
                 <Tooltip
-                  contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8 }}
-                  labelStyle={{ color: '#cbd5e1' }}
+                  {...TOOLTIP_STYLE}
+                  labelFormatter={(t: number) => fmtDate(tsToIso(t))}
                   formatter={(value: number) => `$${value.toLocaleString('en-AU')}`}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line
-                  type="monotone"
+                  type="linear"
                   dataKey={left}
-                  stroke="#38bdf8"
+                  stroke={COLORS.accent}
                   strokeWidth={2}
+                  dot={{ r: 3 }}
                   connectNulls
                   isAnimationActive={false}
                 />
                 {!sameLocation && (
                   <Line
-                    type="monotone"
+                    type="linear"
                     dataKey={right}
-                    stroke="#f472b6"
+                    stroke={COLORS.secondSeries}
                     strokeWidth={2}
+                    dot={{ r: 3 }}
                     connectNulls
                     isAnimationActive={false}
                   />

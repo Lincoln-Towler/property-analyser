@@ -22,6 +22,7 @@
 // suite is unaffected.
 
 import type { PropertyPoint } from './engine';
+import { fmtPriceCompact } from '../format';
 
 export const LOCATION_METRICS = [
   'median_price',
@@ -125,7 +126,7 @@ export function formatMetric(metric: string, value: number | undefined): string 
   if (value === undefined) return 'No data';
   switch (metric) {
     case 'median_price':
-      return `$${(value / 1000).toFixed(0)}K`;
+      return fmtPriceCompact(value);
     case 'annual_growth':
       return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
     case 'rental_yield':

@@ -1,10 +1,28 @@
 import { getSiteData } from '@/lib/data';
 import { buildAudit } from '@/lib/scoring/engine';
-import { INDICATORS_CONFIG, STALE_AFTER_DAYS } from '@/lib/scoring/config';
+import { EXTRA_INDICATOR_NAMES, INDICATORS_CONFIG, STALE_AFTER_DAYS } from '@/lib/scoring/config';
 import { auditPropertyData } from '@/lib/property-audit';
+import { groupByPublisher } from '@/lib/sources';
+import { fmtDate, fmtIndicator } from '@/lib/format';
 import { SetupNotice } from '@/components/SetupNotice';
+import { DataStamp, PageHeader } from '@/components/ui';
 
 export const revalidate = 3600;
+
+function AgeBadge({ days }: { days: number | null }) {
+  if (days === null) return <span className="text-xs text-slate-500">no data</span>;
+  const tone =
+    days > STALE_AFTER_DAYS
+      ? 'bg-red-500/15 text-red-300 ring-red-500/30'
+      : days > 35
+        ? 'bg-amber-500/15 text-amber-300 ring-amber-500/30'
+        : 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30';
+  return (
+    <span className={`inline-block whitespace-nowrap rounded px-2 py-0.5 text-xs tabular-nums ring-1 ${tone}`}>
+      {days}d{days > STALE_AFTER_DAYS ? ' · stale' : ''}
+    </span>
+  );
+}
 
 export default async function AuditPage() {
   const data = await getSiteData();
@@ -19,16 +37,13 @@ export default async function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-xl font-semibold">Data Audit</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Freshness and coverage per indicator. Anything older than {STALE_AFTER_DAYS} days is
-          flagged — a stale value still feeds the weighted score, so this is the first place to
-          look when the headline number seems off. The n8n feed writes to{' '}
-          <code className="rounded bg-slate-800 px-1">economic_indicators_history</code>; rows
-          labelled <em>manual</em> come from the current table.
-        </p>
-      </header>
+      <PageHeader title="Data audit">
+        Freshness and coverage per indicator. Anything older than {STALE_AFTER_DAYS} days is flagged — a
+        stale value still feeds the weighted score, so this is the first place to look when the headline
+        number seems off. Sources are grouped by publisher; <em>n8n feed</em> rows come from{' '}
+        <code className="rounded bg-slate-800 px-1">economic_indicators_history</code>, everything else was
+        entered manually.
+      </PageHeader>
 
       {frozen.length > 0 && (
         <section className="rounded-xl border border-amber-700/60 bg-amber-950/30 p-5 text-sm">
@@ -78,34 +93,40 @@ export default async function AuditPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
-            {audit.map((row) => (
-              <tr key={row.indicator} className={row.stale ? 'bg-red-950/20' : ''}>
-                <td className="px-4 py-3">
-                  {row.display_name}
-                  {row.stale && <span className="ml-2 text-xs text-red-400">stale</span>}
-                </td>
-                <td className="px-4 py-3 tabular-nums text-slate-400">
-                  {INDICATORS_CONFIG[row.indicator]?.weight ?? '—'}
-                </td>
-                <td className="px-4 py-3 tabular-nums">
-                  {row.latest_value === null
-                    ? '—'
-                    : Math.abs(row.latest_value) >= 1000
-                      ? row.latest_value.toLocaleString('en-US')
-                      : row.latest_value}
-                </td>
-                <td className="px-4 py-3 tabular-nums">{row.latest_date ?? '—'}</td>
-                <td className="px-4 py-3 tabular-nums">
-                  {row.days_old === null ? 'no data' : `${row.days_old}d`}
-                </td>
-                <td className="px-4 py-3 tabular-nums">{row.point_count}</td>
-                <td className="px-4 py-3 text-xs text-slate-400">
-                  {Object.entries(row.sources)
-                    .map(([s, n]) => `${s}: ${n}`)
-                    .join(', ') || '—'}
-                </td>
-              </tr>
-            ))}
+            {audit.map((row) => {
+              const publishers = groupByPublisher(row.sources);
+              return (
+                <tr key={row.indicator} className={row.stale ? 'bg-red-950/20' : ''}>
+                  <td className="px-4 py-3 font-medium">
+                    {INDICATORS_CONFIG[row.indicator]?.display_name ?? EXTRA_INDICATOR_NAMES[row.indicator] ?? row.display_name}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-slate-400">
+                    {INDICATORS_CONFIG[row.indicator]?.weight ?? '—'}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 tabular-nums">
+                    {fmtIndicator(row.latest_value, INDICATORS_CONFIG[row.indicator]?.unit ?? '')}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 tabular-nums">{fmtDate(row.latest_date)}</td>
+                  <td className="px-4 py-3">
+                    <AgeBadge days={row.days_old} />
+                  </td>
+                  <td className="px-4 py-3 tabular-nums">{row.point_count}</td>
+                  <td className="px-4 py-3">
+                    {publishers.length ? (
+                      <div className="flex flex-wrap gap-1">
+                        {publishers.map(([pub, n]) => (
+                          <span key={pub} className="whitespace-nowrap rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-300">
+                            {pub} <span className="text-slate-500">×{n}</span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -122,7 +143,7 @@ export default async function AuditPage() {
               <ul className="list-disc pl-5 text-slate-300">
                 {data.adjustments.dropped.map((d) => (
                   <li key={`${d.indicator}-${d.date}`}>
-                    {d.indicator}: {d.value} on {d.date}
+                    {d.indicator}: {d.value} on {fmtDate(d.date)}
                   </li>
                 ))}
               </ul>
@@ -141,7 +162,7 @@ export default async function AuditPage() {
         <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 text-sm">
           <h2 className="mb-1 font-medium">Property data quality</h2>
           <p className="mb-3 text-xs text-slate-400">
-            {propertyAudit.locations} locations, newest snapshot {propertyAudit.latestDate ?? '—'}.
+            {propertyAudit.locations} locations, newest snapshot {fmtDate(propertyAudit.latestDate)}.
             Nothing here is excluded from charts or scoring — these are readings worth a second
             look, not errors. Locations mix capitals, suburbs and regional towns, so an extreme
             value is often a narrow sub-market sample rather than a bad number.
@@ -156,7 +177,7 @@ export default async function AuditPage() {
                 {propertyAudit.flags.map((f) => (
                   <li key={`${f.location}-${f.metric}-${f.date}`}>
                     <span className="font-medium">{f.location}</span> {f.metric}{' '}
-                    <span className="tabular-nums">{f.value}</span> on {f.date} — {f.note}
+                    <span className="tabular-nums">{f.value}</span> on {fmtDate(f.date)} — {f.note}
                   </li>
                 ))}
               </ul>
@@ -177,7 +198,7 @@ export default async function AuditPage() {
                 {propertyAudit.duplicates.slice(0, 8).map((d) => (
                   <li key={`${d.location}-${d.metric}`}>
                     <span className="font-medium">{d.location}</span> {d.metric} ={' '}
-                    <span className="tabular-nums">{d.value}</span> on {d.dates.join(' and ')}
+                    <span className="tabular-nums">{d.value}</span> on {d.dates.map(fmtDate).join(' and ')}
                   </li>
                 ))}
                 {propertyAudit.duplicates.length > 8 && (
@@ -213,12 +234,12 @@ export default async function AuditPage() {
         <h2 className="mb-2 font-medium">Score snapshots</h2>
         <p>
           {data.scoreHistory.length
-            ? `${data.scoreHistory.length} daily snapshot(s) recorded, latest ${data.scoreHistory[data.scoreHistory.length - 1].score_date}.`
+            ? `${data.scoreHistory.length} daily snapshots recorded, latest ${fmtDate(data.scoreHistory[data.scoreHistory.length - 1].score_date)}.`
             : 'No daily score snapshots yet — they appear once the /api/snapshot cron has run (see web/README).'}
         </p>
       </section>
 
-      <p className="text-xs text-slate-500">Data as of {data.fetchedAt.slice(0, 16).replace('T', ' ')} UTC</p>
+      <DataStamp fetchedAt={data.fetchedAt} />
     </div>
   );
 }
