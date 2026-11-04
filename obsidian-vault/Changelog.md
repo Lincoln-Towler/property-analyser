@@ -10,6 +10,13 @@
 - **BTC:** `btc_video_analysis` and `btc_flag_suggestions` tables with approve-to-apply, supersede and 20-flag-limit triggers; `get_btc_signal` caps the flags' combined effect at ±2 (migrations `0008`–`0010`). First review cycle: 11 suggestions applied, 8 rejected.
 - **Repo:** workflow source, tests and importable JSON committed under `n8n/`; `CLAUDE.md` added for future Claude sessions.
 
+### Cash rate and price chart (4 Nov)
+- **Data review:** the Cowen automation ran on 3 and 4 Nov and applied four flag changes with no failures. Every fed indicator except the cash rate matched its official source, using a dry run of the workflow's own parsers. BTC prices were within 0.07% of CoinGecko.
+- **Cash rate:** the RBA moved to 4.85% on 4 Nov, and the Monday-only feed wouldn't have seen it until 9 Nov. Added by hand (`0017`), with the RBA as its source.
+- **Score now counts real rate changes only:** repeated readings made the trend read "stable" a week after a rise. The engine is unchanged; `prepareSeries` gives it the changes only. Score: 43.02 before, 41.04 with 4.85% and a rising trend, holding until about 30 Dec, when the 30 Sep decision leaves the 3-month window.
+- **Indicators feed runs daily:** new figures arrive within a day (needs a re-import).
+- **`/locations` chart:** now plots SQM asking prices only. It had joined them to older sold medians, which drew moves that never happened (Sydney "+39%").
+
 ### Close-out (2 Nov, see [[Handoff 2026-11-02 (close-out)]])
 - **No more approvals:** BTC flag changes apply as soon as the workflow saves them (migration `0014`). `btc_flag_suggestions` stays as the log. When 20 flags are active, the stalest retires to make room.
 - **Website can't change anything:** the public key and signed-up users lost every write permission (migration `0015`). Tested by attempting writes with the public key; all were refused. The `/admin` and approval-screen plans are dropped.

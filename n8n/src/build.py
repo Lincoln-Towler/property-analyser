@@ -57,6 +57,9 @@ branches = [
 
 trigger = by_id["0f664fd8-565c-41b3-b37e-b40703d95c3d"]
 trigger["position"] = [-1072, 672]
+# Every morning, so a new figure is in within a day. All the saves are upserts, so a
+# run that finds nothing new changes nothing, apart from the cash rate's daily row.
+trigger["parameters"] = {"rule": {"interval": [{"field": "days", "triggerAtHour": 7}]}}
 nodes = [trigger]
 connections = {"Schedule Trigger": {"main": [[]]}}
 starts = []
@@ -92,7 +95,7 @@ for s in starts:
 nodes.append({
     "parameters": {
         "content": "## Economic indicators (fixed 2 Nov 2026)\n"
-                   "Each row fetches one indicator, reads the number, and saves it to `economic_indicators_history`.\n\n"
+                   "Runs every morning at 7:00. Each row fetches one indicator, reads the number, and saves it to `economic_indicators_history`.\n\n"
                    "- If a source fails or looks wrong, that row saves nothing and the others keep running.\n"
                    "- The score audit shows any indicator that has gone stale.",
         "height": 220, "width": 420, "color": 4,

@@ -113,6 +113,14 @@ export function scoreAllLocations(rows: PropertyPoint[]): ScoredLocation[] {
     .sort((a, b) => b.score - a.score || a.location.localeCompare(b.location));
 }
 
+/** Can this reading sit on the asking-price trend line? median_price holds SQM's
+ *  asking price since October 2026, and sold medians from other publishers before
+ *  that. Joining them draws moves that never happened: Sydney "rose" 39% from
+ *  August to October just by changing measure. The old rows stay in the table. */
+export function isAskingPriceReading(p: PropertyPoint): boolean {
+  return p.metric_name === 'median_price' && /^SQM asking price/.test(p.source ?? '');
+}
+
 export const METRIC_LABELS: Record<string, string> = {
   median_price: 'Asking Price (3-bed)',
   annual_growth: '12-Month Growth',

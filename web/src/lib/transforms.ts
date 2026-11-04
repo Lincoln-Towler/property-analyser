@@ -14,6 +14,12 @@
 //    the trailing 12 months of monthly readings x 12, so thresholds, the
 //    chart target line, and the score all operate in the units they were
 //    written for.
+//
+// 3. Changes-only scoring for the cash rate — the feed saves the rate on every
+//    run, which is how /audit can tell the feed is alive. But the engine's trend
+//    compares the last two rows, so a repeat of the same rate reads as "stable"
+//    a week after a rise. The score therefore reads only the rows where the rate
+//    changed; charts and the audit still see every row.
 
 import type { SeriesMap, DataPoint } from './scoring/engine';
 
@@ -38,7 +44,12 @@ export interface SeriesAdjustments {
   dropped: DroppedPoint[];
   /** Indicators whose values were annualised from monthly readings. */
   annualized: string[];
+  /** Indicators the score reads as changes only (see keepChanges). */
+  changesOnly: string[];
 }
+
+/** Series that only move when a decision changes them. */
+const STEP_SERIES = new Set(['interest_rate']);
 
 function monthsBeforeISO(dateISO: string, months: number): string {
   const d = new Date(dateISO + 'T00:00:00Z');
@@ -76,10 +87,24 @@ export function looksMonthly(points: DataPoint[]): boolean {
   return Math.max(...points.map((p) => p.value)) < 60000;
 }
 
-export function prepareSeries(raw: SeriesMap): { series: SeriesMap; adjustments: SeriesAdjustments } {
+/** Keeps the first reading and each one where the value differs from the last. */
+export function keepChanges(points: DataPoint[]): DataPoint[] {
+  const sorted = [...points].sort((a, b) => (a.date < b.date ? -1 : 1));
+  return sorted.filter((p, i) => i === 0 || p.value !== sorted[i - 1].value);
+}
+
+/** `series` holds every usable reading, for charts and the audit. `scoring` is
+ *  what the engine reads: the same, but step series keep only their changes. */
+export function prepareSeries(raw: SeriesMap): {
+  series: SeriesMap;
+  scoring: SeriesMap;
+  adjustments: SeriesAdjustments;
+} {
   const dropped: DroppedPoint[] = [];
   const annualized: string[] = [];
+  const changesOnly: string[] = [];
   const series: SeriesMap = {};
+  const scoring: SeriesMap = {};
 
   for (const [name, points] of Object.entries(raw)) {
     const range = PLAUSIBLE_RANGES[name];
@@ -96,7 +121,13 @@ export function prepareSeries(raw: SeriesMap): { series: SeriesMap; adjustments:
       annualized.push(name);
     }
     series[name] = kept;
+    if (STEP_SERIES.has(name)) {
+      scoring[name] = keepChanges(kept);
+      changesOnly.push(name);
+    } else {
+      scoring[name] = kept;
+    }
   }
 
-  return { series, adjustments: { dropped, annualized } };
+  return { series, scoring, adjustments: { dropped, annualized, changesOnly } };
 }

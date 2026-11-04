@@ -201,7 +201,7 @@ export default async function AuditPage() {
         </table>
       </div>
 
-      {(data.adjustments.dropped.length > 0 || data.adjustments.annualized.length > 0) && (
+      {(data.adjustments.dropped.length > 0 || data.adjustments.annualized.length > 0 || data.adjustments.changesOnly.length > 0) && (
         <section className="rounded-xl border border-amber-700/60 bg-amber-950/30 p-5 text-sm text-slate-200">
           <h2 className="mb-2 font-medium">Data adjustments applied</h2>
           {data.adjustments.dropped.length > 0 && (
@@ -223,6 +223,12 @@ export default async function AuditPage() {
             <p key={name}>
               <strong>{name}</strong>: feed delivers monthly readings — values shown and scored
               as a trailing 12-month annualised rate to match the annual thresholds.
+            </p>
+          ))}
+          {data.adjustments.changesOnly.map((name) => (
+            <p key={name}>
+              <strong>{name}</strong>: saved on every feed run, so the score counts only the readings where it actually
+              changed. Otherwise a repeat of the same rate would read as &quot;stable&quot; straight after a rise.
             </p>
           ))}
         </section>

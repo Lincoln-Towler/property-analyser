@@ -51,8 +51,8 @@ export default async function Dashboard() {
   if (!data) return <SetupNotice />;
 
   const now = new Date();
-  const v3 = calculateMarketScoreV3(data.series, data.propertyData, now);
-  const parts = buildCommentaryParts(data.series, v3.score, now);
+  const v3 = calculateMarketScoreV3(data.scoring, data.propertyData, now);
+  const parts = buildCommentaryParts(data.scoring, v3.score, now);
   const ci = v3.breakdown.confidence_interval;
   const sub = v3.breakdown.sub_scores;
   const staleCount = buildAudit(data.series, now).filter((a) => a.point_count > 0 && a.stale).length;

@@ -21,6 +21,7 @@ function check(name, got, expected) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : `\n      got:      ${JSON.stringify(got)}\n      expected: ${JSON.stringify(expected)}`}`);
 }
 const today = new Date().toISOString().split('T')[0];
+const adelaideToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Adelaide' }).format(new Date());
 
 // ---------- sample responses (structure copied from the live sites on 2 Nov 2026) ----------
 const cashHtml = `<table><thead><tr><th>Effective date</th><th>Change</th><th>Rate</th></tr></thead><tbody>\r\n\t\t\t<!-- year 2026 -->\r\n\t\t\t<tr>\r\n\t\t\t\t<th scope="row">30 Sep 2026</th>\r\n\t\t\t\t<td>+0.25</td>\r\n\t\t\t\t<td>4.60</td>\r\n\t\t\t\t<td class="links"><a href="#">Statement</a></td>\r\n\t\t\t</tr>\r\n\t\t\t<tr>\r\n\t\t\t\t<th scope="row">12 Aug 2026</th>\r\n\t\t\t\t<td>0.00</td>\r\n\t\t\t\t<td>4.35</td></tr></tbody></table>`;
@@ -56,8 +57,8 @@ const auctionHtml = `<script type="application/ld+json">{"@type":"Article","date
 
 (async () => {
   // Cash rate
-  check('cash rate: normal page', (await run('parse_cash_rate.js', [{ json: { data: cashHtml } }])).out, [{ json: { value: 4.6, date: today } }]);
-  check('cash rate: RBA HOLD row on top (old code would save 0.00)', (await run('parse_cash_rate.js', [{ json: { data: cashHoldHtml } }])).out, [{ json: { value: 4.6, date: today } }]);
+  check('cash rate: normal page', (await run('parse_cash_rate.js', [{ json: { data: cashHtml } }])).out, [{ json: { value: 4.6, date: adelaideToday } }]);
+  check('cash rate: RBA HOLD row on top (old code would save 0.00)', (await run('parse_cash_rate.js', [{ json: { data: cashHoldHtml } }])).out, [{ json: { value: 4.6, date: adelaideToday } }]);
   check('cash rate: failed request is skipped', (await run('parse_cash_rate.js', [{ json: { error: { message: 'timeout' } } }])).out, []);
 
   // RBA URLs

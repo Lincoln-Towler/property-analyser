@@ -60,6 +60,7 @@ Nothing is live until the merge. If he says "I can't see X", check `git log orig
 - The view `economic_indicators_combined` (SECURITY INVOKER) merges the two. A manual row wins when both have the same date and indicator. The site and the snapshot cron read only this view.
 - A `CHECK (is_known_indicator(...))` constraint allows only the 12 known names.
 - Monthly and quarterly values are dated the first day of the period.
+- The feed runs daily and saves the cash rate on every run, which is how `/audit` can tell it's alive. So `prepareSeries` returns two things: `series` (every reading, for charts and the audit) and `scoring` (what the engine reads, where the cash rate keeps only the rows where it changed). Without that, a repeat of the same rate reads as "stable" a week after a rise.
 
 **Web data path**
 - `web/src/lib/data.ts` makes one query per table per ISR window (`revalidate = 3600`).
@@ -74,7 +75,7 @@ Nothing is live until the merge. If he says "I can't see X", check `git log orig
 
 **Property data**
 - `property_data` holds `(date, location, metric_name, value, source)`.
-- `median_price` is SQM's 13-week average **asking** price for 3-bed houses, not a sold median.
+- `median_price` is SQM's 13-week average **asking** price for 3-bed houses, not a sold median. Rows before October 2026 are sold medians from other publishers, so the `/locations` trend chart plots SQM rows only (`isAskingPriceReading`).
 - `days_on_market` and `sales_volume` are entered manually, by Lincoln's choice.
 
 **BTC signal** (separate from the property score)
@@ -136,9 +137,15 @@ Published figures differ by methodology: Australian household debt-to-GDP spans 
 
 ## Known open issues
 
+- **The market score jumps on 1 January 2027.** `cyclePosition` counts whole calendar years, so the multiplier goes from ×0.9 to ×1.1 for 2027–2030. On unchanged data the score goes from about 43 (Hold) to 52.6 (Moderate Buy), labelled "Prime Opportunity Window". Lincoln chose to leave it for now (3 Nov 2026). The recommendation was to take the multiplier out of the score and keep `/cycle` as context. Raise it once more before the date.
+- **"High confidence" overstates.** `calculateConfidenceInterval` only counts whether each indicator has a value, not how old it is. Fixing it changes the label, not the number.
 - **Manual indicators weigh heavily and go stale.** `household_debt_gdp` has the second-highest weight and no feed; its latest reading is December 2025. Its last two rows are labelled "BIS via Trading Economics" and the first "ABS". The levels fit the 113.x family, but the labels break the one-source rule above. `/audit` shows the weight riding on frozen data.
 - **Quarterly indicators can never trend or register volatility.** The engine needs 2 readings in 3 months and 3 in 6 months; a quarterly cadence supplies 1 and 2. Backfilling can't fix this; only frequency-aware windows would, which is a scoring change. Pinned by a test in `window-context.test.ts`.
 - **Monthly series drop out of the trend window for part of each month.** They're dated the first of the month, so on the 2nd the reading from three months ago falls outside the 3-month window, and it stays out until the next release arrives. On 2 Nov that took the "can't trend" share on `/audit` from 22% to 70%. The score didn't move that day (43.02 either way), but a large move could be missed during those weeks. Month-aligned windows would fix it, which is a scoring change.
 - **Location scores now use asking-price growth.** The thresholds (growth above 10% and so on) were set for sold prices, and asking prices move more smoothly. They haven't been retuned.
 - **Days on market is manual and can go stale.** The latest reading is August 2026, and it still counts toward the location score. `sales_volume` is also manual, but it's display-only.
+- **Location scores barely separate.** 9 of 11 score 80 or more.
+- **Auction clearance mixes sources.** Rows up to 11 Oct 2026 are Cotality finals; the feed's rows come from PropertyUpdate's weekly report, dated when it's published.
+- **BTC bands are hard steps.** 6 of 12 signal changes over 161 days came on moves under 2%. A sliding scale cut that to 2, but LIGHT BUY days fell from 47 to 8, so it changes what the signal says. Review after a few weeks under the new rules.
+- **The BTC price isn't live.** It's one reading a day at about 6:01am Adelaide, from the n8n morning brief (that workflow isn't in this repo). `/btc` labels it "current price". Logged prices were within 0.07% of CoinGecko on 3 and 4 Nov.
 - **The two-point trend rule is blind on weekly series.** Auction clearance fell 17% over six readings and scored "stable". `getWindowContext` surfaces the contradiction without changing the score.

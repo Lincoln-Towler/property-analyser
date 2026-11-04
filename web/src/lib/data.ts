@@ -15,7 +15,10 @@ export interface ScoreHistoryRow {
 }
 
 export interface SiteData {
+  /** Every usable reading, for charts and the audit. */
   series: SeriesMap;
+  /** What the scoring engine reads: see prepareSeries. */
+  scoring: SeriesMap;
   propertyData: PropertyPoint[];
   scoreHistory: ScoreHistoryRow[];
   adjustments: SeriesAdjustments;
@@ -48,7 +51,7 @@ export const getSiteData = cache(async (): Promise<SiteData | null> => {
       .order('date', { ascending: true }),
     supabase
       .from('property_data')
-      .select('date, location, metric_name, value')
+      .select('date, location, metric_name, value, source')
       .gte('date', monthsAgoISO(12))
       .order('date', { ascending: true }),
     supabase
@@ -78,13 +81,14 @@ export const getSiteData = cache(async (): Promise<SiteData | null> => {
   }
   // Drop implausible values and annualise monthly building approvals before
   // anything downstream (engine, charts) sees the data.
-  const { series, adjustments } = prepareSeries(rawSeries);
+  const { series, scoring, adjustments } = prepareSeries(rawSeries);
 
   const propertyData: PropertyPoint[] = (property.data ?? []).map((row) => ({
     date: row.date,
     location: row.location,
     metric_name: row.metric_name,
     value: Number(row.value),
+    source: row.source,
   }));
 
   const scoreHistory: ScoreHistoryRow[] = (history.data ?? [])
@@ -93,6 +97,7 @@ export const getSiteData = cache(async (): Promise<SiteData | null> => {
 
   return {
     series,
+    scoring,
     propertyData,
     scoreHistory,
     adjustments,
