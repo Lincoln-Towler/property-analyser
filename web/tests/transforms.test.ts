@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { prepareSeries, annualizeMonthly, looksMonthly } from '../src/lib/transforms';
+import { prepareSeries, annualizeMonthly, keepChanges, looksMonthly } from '../src/lib/transforms';
+import { getIndicatorTrend } from '../src/lib/scoring/engine';
 
 describe('plausibility filter', () => {
   it('drops the broken-scraper zero pattern that hit interest_rate in July 2026', () => {
@@ -72,5 +73,63 @@ describe('building approvals annualisation', () => {
     expect(prepared.adjustments.annualized).toEqual(['building_approvals']);
     // first surviving point is the 6th reading (first full-enough window)
     expect(prepared.series.building_approvals[0].date).toBe('2026-05-01');
+  });
+});
+
+describe('scoring reads the cash rate as changes only', () => {
+  // The real shape: a rise, weekly repeats, another rise, then repeats.
+  const stored = [
+    { date: '2026-08-12', value: 4.35 },
+    { date: '2026-09-30', value: 4.6 },
+    { date: '2026-10-04', value: 4.6 },
+    { date: '2026-10-11', value: 4.6 },
+    { date: '2026-11-04', value: 4.85 },
+    { date: '2026-11-08', value: 4.85 },
+    { date: '2026-11-15', value: 4.85 },
+  ];
+
+  it('keeps every row for charts and only the changes for scoring', () => {
+    const { series, scoring, adjustments } = prepareSeries({ interest_rate: stored });
+    expect(series.interest_rate).toHaveLength(7);
+    expect(scoring.interest_rate.map((p) => p.date)).toEqual(['2026-08-12', '2026-09-30', '2026-11-04']);
+    expect(adjustments.changesOnly).toEqual(['interest_rate']);
+  });
+
+  it('stops repeats hiding a rise from the trend', () => {
+    const now = new Date('2026-11-16T12:00:00Z');
+    const { series, scoring } = prepareSeries({ interest_rate: stored });
+    expect(getIndicatorTrend(series.interest_rate, now, 3)[0]).toBe('stable');
+    expect(getIndicatorTrend(scoring.interest_rate, now, 3)[0]).toBe('rising');
+  });
+
+  it('reads stable again once the earlier decision leaves the 3-month window', () => {
+    const { scoring } = prepareSeries({ interest_rate: stored });
+    expect(getIndicatorTrend(scoring.interest_rate, new Date('2026-12-29T12:00:00Z'), 3)[0]).toBe('rising');
+    expect(getIndicatorTrend(scoring.interest_rate, new Date('2026-12-31T12:00:00Z'), 3)[0]).toBe('stable');
+  });
+
+  it('leaves other series alone, because a repeated reading there is real data', () => {
+    const repeated = [
+      { date: '2026-08-01', value: 4.7 },
+      { date: '2026-09-01', value: 4.7 },
+    ];
+    const { scoring, adjustments } = prepareSeries({ unemployment_rate: repeated });
+    expect(scoring.unemployment_rate).toHaveLength(2);
+    expect(adjustments.changesOnly).toEqual([]);
+  });
+
+  it('ignores broken readings, so a bad zero cannot look like two changes', () => {
+    const { scoring } = prepareSeries({
+      interest_rate: [
+        { date: '2026-07-01', value: 4.35 },
+        { date: '2026-07-08', value: 0 },
+        { date: '2026-07-15', value: 4.35 },
+      ],
+    });
+    expect(scoring.interest_rate.map((p) => p.date)).toEqual(['2026-07-01']);
+  });
+
+  it('sorts first, because rows can arrive in any order', () => {
+    expect(keepChanges([stored[4], stored[0], stored[1]]).map((p) => p.value)).toEqual([4.35, 4.6, 4.85]);
   });
 });

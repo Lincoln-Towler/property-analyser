@@ -63,8 +63,9 @@ function IndicatorCard({ name, data, now }: { name: string; data: SiteData; now:
   const isAnnualized = data.adjustments.annualized.includes(name);
   // Honest window shape alongside the scored two-point trend — surfaced only
   // when the two disagree (see getWindowContext).
-  const [scoredTrend] = getIndicatorTrend(points, now, 3);
-  const windowCtx = getWindowContext(points, now, 3);
+  const scoredPoints = data.scoring[name] ?? [];
+  const [scoredTrend] = getIndicatorTrend(scoredPoints, now, 3);
+  const windowCtx = getWindowContext(scoredPoints, now, 3);
   const showWindow = windowContradictsTrend(windowCtx, scoredTrend);
 
   return (
@@ -141,7 +142,7 @@ export default async function IndicatorsPage() {
   if (!data) return <SetupNotice />;
 
   const now = new Date();
-  const sub = calculateMarketScoreV3(data.series, data.propertyData, now).breakdown.sub_scores;
+  const sub = calculateMarketScoreV3(data.scoring, data.propertyData, now).breakdown.sub_scores;
   const byWeight = (a: string, b: string) => (INDICATORS_CONFIG[b]?.weight ?? 0) - (INDICATORS_CONFIG[a]?.weight ?? 0);
   const context = Object.keys(data.series).filter((n) => !(n in INDICATORS_CONFIG));
 

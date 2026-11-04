@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       source: row.source,
     });
   }
-  const { series, adjustments } = prepareSeries(rawSeries);
+  const { series, scoring, adjustments } = prepareSeries(rawSeries);
   const propertyData: PropertyPoint[] = (property.data ?? []).map((r) => ({
     date: r.date,
     location: r.location,
@@ -56,8 +56,8 @@ export async function GET(request: NextRequest) {
     value: Number(r.value),
   }));
 
-  const v3 = calculateMarketScoreV3(series, propertyData, now);
-  const commentary = generateAutoCommentary(series, v3.score, v3.signal, now);
+  const v3 = calculateMarketScoreV3(scoring, propertyData, now);
+  const commentary = generateAutoCommentary(scoring, v3.score, v3.signal, now);
   const audit = buildAudit(series, now);
 
   const { error } = await supabase.from('market_score_history').upsert(
