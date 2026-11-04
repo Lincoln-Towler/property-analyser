@@ -51,7 +51,7 @@ export const getSiteData = cache(async (): Promise<SiteData | null> => {
       .order('date', { ascending: true }),
     supabase
       .from('property_data')
-      .select('date, location, metric_name, value')
+      .select('date, location, metric_name, value, source')
       .gte('date', monthsAgoISO(12))
       .order('date', { ascending: true }),
     supabase
@@ -88,6 +88,7 @@ export const getSiteData = cache(async (): Promise<SiteData | null> => {
     location: row.location,
     metric_name: row.metric_name,
     value: Number(row.value),
+    source: row.source,
   }));
 
   const scoreHistory: ScoreHistoryRow[] = (history.data ?? [])

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { locationScore, latestMetrics, scoreAllLocations } from '../src/lib/scoring/location';
+import { locationScore, latestMetrics, scoreAllLocations, isAskingPriceReading } from '../src/lib/scoring/location';
 import type { PropertyPoint } from '../src/lib/scoring/engine';
 
 const m = (
@@ -78,5 +78,23 @@ describe('latestMetrics', () => {
     const scored = scoreAllLocations(rows);
     expect(scored.map((s) => s.location)).toContain('Perth WA');
     expect(scored.find((s) => s.location === 'Perth WA')?.latestDate).toBe('2026-08-01');
+  });
+});
+
+describe('isAskingPriceReading', () => {
+  const row = (metric_name: string, source: string | null) => ({ date: '2026-10-23', location: 'Sydney NSW', metric_name, value: 1, source });
+
+  it('accepts SQM asking prices only', () => {
+    expect(isAskingPriceReading(row('median_price', 'SQM asking price, 3-bed houses, 13-wk avg'))).toBe(true);
+  });
+
+  it('rejects sold medians from other publishers, so the chart cannot join two measures', () => {
+    expect(isAskingPriceReading(row('median_price', 'Cotality/HtAG Aug 2026'))).toBe(false);
+    expect(isAskingPriceReading(row('median_price', 'Hotspotting'))).toBe(false);
+    expect(isAskingPriceReading(row('median_price', null))).toBe(false);
+  });
+
+  it('rejects other SQM metrics', () => {
+    expect(isAskingPriceReading(row('annual_growth', 'SQM asking price change vs year earlier'))).toBe(false);
   });
 });

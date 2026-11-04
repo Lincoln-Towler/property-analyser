@@ -31,6 +31,7 @@ export interface PropertyPoint {
   location: string;
   metric_name: string;
   value: number;
+  source?: string | null;
 }
 
 export interface IndicatorScore {

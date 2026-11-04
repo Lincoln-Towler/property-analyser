@@ -245,7 +245,7 @@ export function LocationCompare({
           </div>
         ) : (
           <p className="rounded-md bg-slate-800/60 px-3 py-6 text-center text-sm text-slate-400">
-            Need asking-price readings on at least two dates to chart a trend.
+            SQM asking prices start in late October 2026, so this fills in as weekly readings arrive.
           </p>
         )}
       </section>

@@ -3,6 +3,7 @@ import { calculateRegionalDivergence } from '@/lib/scoring/engine';
 import {
   scoreAllLocations,
   formatMetric,
+  isAskingPriceReading,
   METRIC_LABELS,
 } from '@/lib/scoring/location';
 import { LocationCompare, type PriceSeriesPoint } from '@/components/LocationCompare';
@@ -66,7 +67,7 @@ export default async function LocationsPage() {
   const divergence = calculateRegionalDivergence(rows, new Date());
 
   // Wide-format asking price series for the comparison chart (stored as median_price)
-  const priceRows = rows.filter((r) => r.metric_name === 'median_price');
+  const priceRows = rows.filter(isAskingPriceReading);
   const dates = [...new Set(priceRows.map((r) => r.date))].sort();
   const priceSeries: PriceSeriesPoint[] = dates.map((date) => {
     const point: PriceSeriesPoint = { date };
