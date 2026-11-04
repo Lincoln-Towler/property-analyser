@@ -5,7 +5,7 @@ not in this repo, so this folder is the source of truth and history for them.
 
 | File in `workflows/` | Schedule (Adelaide) | Writes to |
 |---|---|---|
-| `Economic Indicators.json` | Mondays 7:00am | `economic_indicators_history` |
+| `Economic Indicators.json` | Daily 7:00am | `economic_indicators_history` |
 | `Location Data (SQM).json` | Mondays 7:15am | `property_data` |
 | `Cowen Videos - BTC Flag Suggestions.json` | Daily 8:30am | `btc_video_analysis`, `btc_flag_suggestions` |
 

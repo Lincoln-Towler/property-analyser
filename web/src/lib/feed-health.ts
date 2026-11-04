@@ -68,7 +68,7 @@ export function buildFeedHealth(input: {
 
   // The cash rate is saved with the date of each run, so it shows the workflow itself ran
   const jobs: JobHealth[] = [
-    job('Economic indicators', 'Mondays 7:00am', latestOf('interest_rate'), 9, now),
+    job('Economic indicators', 'Daily 7:00am', latestOf('interest_rate'), 9, now),
     job('Location data (SQM)', 'Mondays 7:15am', newest(propertyData.filter((p) => p.metric_name === 'median_price').map((p) => p.date)), 21, now),
     job('Daily score snapshot', 'Daily', newest(scoreHistory.map((s) => s.score_date)), 2, now),
   ];

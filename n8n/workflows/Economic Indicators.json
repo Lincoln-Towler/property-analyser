@@ -6,10 +6,7 @@
         "rule": {
           "interval": [
             {
-              "field": "weeks",
-              "triggerAtDay": [
-                1
-              ],
+              "field": "days",
               "triggerAtHour": 7
             }
           ]
@@ -50,7 +47,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Reads the RBA cash rate page and pulls the current cash rate target\n// from the newest row of the table: | date | change | cash rate |\ntry {\n  const html = String($input.first().json.data || '');\n  const row = html.match(/<tbody[\\s\\S]*?<tr>\\s*<th[^>]*>([^<]+)<\\/th>\\s*<td[^>]*>[^<]*<\\/td>\\s*<td[^>]*>\\s*([\\d.]+)\\s*<\\/td>/);\n  if (!row) throw new Error('could not find the cash rate table');\n\n  const value = parseFloat(row[2]);\n  // Safety check: never save a number that can't be a cash rate\n  if (!(value >= 0.1 && value <= 20)) throw new Error('unexpected value ' + row[2]);\n\n  return [{ json: { value, date: new Date().toISOString().split('T')[0] } }];\n} catch (e) {\n  console.log('Cash rate skipped: ' + e.message);\n  return []; // nothing saved, the other feeds keep running\n}"
+        "jsCode": "// Reads the RBA cash rate page and pulls the current cash rate target\n// from the newest row of the table: | date | change | cash rate |\n// Saves a row on every run, even when the rate hasn't changed: that's how the site's\n// audit can tell this feed is alive. The score only counts rows where the rate changed.\ntry {\n  const html = String($input.first().json.data || '');\n  const row = html.match(/<tbody[\\s\\S]*?<tr>\\s*<th[^>]*>([^<]+)<\\/th>\\s*<td[^>]*>[^<]*<\\/td>\\s*<td[^>]*>\\s*([\\d.]+)\\s*<\\/td>/);\n  if (!row) throw new Error('could not find the cash rate table');\n\n  const value = parseFloat(row[2]);\n  // Safety check: never save a number that can't be a cash rate\n  if (!(value >= 0.1 && value <= 20)) throw new Error('unexpected value ' + row[2]);\n\n  // Adelaide's date: a 7am run is still yesterday in UTC\n  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Adelaide' }).format(new Date());\n  return [{ json: { value, date } }];\n} catch (e) {\n  console.log('Cash rate skipped: ' + e.message);\n  return []; // nothing saved, the other feeds keep running\n}"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -736,7 +733,7 @@
     },
     {
       "parameters": {
-        "content": "## Economic indicators (fixed 2 Nov 2026)\nEach row fetches one indicator, reads the number, and saves it to `economic_indicators_history`.\n\n- If a source fails or looks wrong, that row saves nothing and the others keep running.\n- The score audit shows any indicator that has gone stale.",
+        "content": "## Economic indicators (fixed 2 Nov 2026)\nRuns every morning at 7:00. Each row fetches one indicator, reads the number, and saves it to `economic_indicators_history`.\n\n- If a source fails or looks wrong, that row saves nothing and the others keep running.\n- The score audit shows any indicator that has gone stale.",
         "height": 220,
         "width": 420,
         "color": 4
