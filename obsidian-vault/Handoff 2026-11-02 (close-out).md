@@ -13,6 +13,12 @@ The system runs by itself. n8n collects the data, Supabase stores it, and the pu
 
 Everything above was applied to production on 2 Nov (migrations `0011`–`0015`). The old flag and band rows are in `btc_context_flags_backup_20261102`, `btc_flag_suggestions_backup_20261102` and `btc_key_levels_backup_20261102`.
 
+## Data review, 4 Nov
+
+The automation works: two videos analysed on schedule (3 and 4 Nov), four flag changes applied by themselves, no failures. A dry run of the workflow's own parsers matched every fed indicator to its official source except the cash rate, which the RBA had just raised. See [[Changelog]] for the fixes. The market score is now 41.0.
+
+Not yet checked: the 33 SQM location pages weren't re-fetched, and the Monday workflows' first scheduled runs since the fix are on 9 Nov.
+
 ## What replaced the approval step
 
 These are the limits on a change nobody reviews:
@@ -29,6 +35,7 @@ These are the limits on a change nobody reviews:
 See [[Cutover Checklist]] for the steps.
 
 1. Rotate the database password, and delete the Streamlit app. It's already stopped, so deleting it only clears away a dead page.
+1. Re-import `n8n/workflows/Economic Indicators.json`, so the feed runs daily. Until then it stays on Mondays, which is safe but slow.
 2. Optional: paste `supabase/migrations/0016_drop_empty_legacy_tables.sql` into the SQL Editor. Claude's attempt was stopped by a safety check on bulk deletes.
 3. Copy the updated launcher `index.html` to the NAS in Finder (see the launcher's `CLAUDE.md`). Claude and the Terminal panel can't reach that share.
 4. Optional: re-import `n8n/workflows/Cowen Videos - BTC Flag Suggestions.json`. It tells Claude there's no human check, so it should make fewer marginal changes, and saves retirements first. The live workflow works without it.

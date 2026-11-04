@@ -15,7 +15,7 @@ Nothing on the website can change the data. The only writers are the n8n workflo
 
 | Workflow | When (Adelaide) | Writes to |
 |---|---|---|
-| Economic Indicators | Mondays 7:00am | `economic_indicators_history` |
+| Economic Indicators | Daily 7:00am | `economic_indicators_history` |
 | Location Data (SQM) | Mondays 7:15am | `property_data` |
 | Cowen Videos → BTC flags | Daily 8:30am | `btc_video_analysis`, `btc_flag_suggestions` (which applies to `btc_context_flags`) |
 | BTC brief (separate, not in this repo) | Daily | calls `get_btc_signal`, which logs to `btc_signal_log` |
