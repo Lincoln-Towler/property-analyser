@@ -86,6 +86,10 @@ Nothing is live until the merge. If he says "I can't see X", check `git log orig
 - **Limits:** ±0.5 per flag and a maximum of 20 active flags. When the list is full, the flag that's gone longest without a refresh retires to make room, so it can't jam.
 - **The `/btc` page** reads these tables server-side with the service role (`lib/btc.ts`), including the latest video summaries and flag changes. Pure view logic lives in `lib/btc-view.ts`.
 
+**Design system**
+- Read `web/DESIGN.md` before changing the UI. Tokens live in `globals.css` (`@theme`) and are mirrored in `lib/theme.ts` for charts.
+- Shared primitives are in `components/ui.tsx`. Anything with behaviour (popover, menu, dialog) uses Base UI (`@base-ui/react`), styled with the tokens. Import Base UI only in the client components that use it, never from `ui.tsx`: it adds about 40 kB to every page that imports it.
+
 **Automation health**
 - `lib/feed-health.ts` powers the panel at the top of `/audit`. Nobody checks the feeds by hand, and they once died unnoticed for months, so the site has to say when one stops.
 
@@ -132,7 +136,7 @@ Published figures differ by methodology: Australian household debt-to-GDP spans 
 - **Zero-valued readings are real values, not absences.** `locationScore` uses a presence check, matching `calculateRegionalDivergence`. The Python's `if x and x > n` idiom was a None-check, not a decision about zero.
 - **Location Analysis was deferred, then rebuilt** as `/locations` once an August 2026 snapshot landed.
 - **Streamlit is dropped.** Lincoln's decision, November 2026. Don't redeploy it: the page has no login, and its Data Management tab can add, edit and delete production data using the owner password. Its code stays in `legacy/` for the parity tests.
-- **Function before design.** Work on the Vercel UI comes later, once the data side is proven to work.
+- **Design: borderless, per `web/DESIGN.md`.** Adopted in November 2026, once the data side worked. Tone separates surfaces: no outlines, dividers, shadows or gradients. Each page has one solid verdict, and the dashboard's is the meter. Hints are tap-to-read. `web/tests/design.test.ts` enforces the rules, so fix the design rather than the test.
 - **The BTC flags stay.** Replacing them with one number per video was considered and declined in November 2026. It's known and accepted that the ±2 cap usually absorbs a single flag change.
 
 ## Known open issues

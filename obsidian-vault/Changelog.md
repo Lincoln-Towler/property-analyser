@@ -2,6 +2,12 @@
 
 ## November 2026 - Data pipelines, BTC review loop, UI rework
 
+### Borderless design and the meter (18 Nov)
+- **New look:** the borderless system from WeatherApp. Surfaces are separated by tone, with no outlines, dividers, shadows or gradients. The rules and measurements are in `web/DESIGN.md`, and `web/tests/design.test.ts` checks them.
+- **Lessons from *Ban the AI Look*:** each page has one standout (the dashboard meter, the BTC verdict, the audit health chip). Other statuses are coloured text, not chips. Explanations are tap-to-read popovers built on Base UI, because hover tooltips never show on a phone. Specialist libraries (toasts, drawers, command palette, animated numbers) were skipped, since a read-only site has no use for them yet.
+- **The meter is back, redesigned:** a half dial with the signal bands lit, a needle that sweeps to the score, a 30-day trail, and the distance to the next band either way.
+- **Readability:** the red used for warnings was too dark on open rows (4.13:1), so it's slightly lighter now (4.67:1). The cycle phases use equal columns on desktop, and the score chart's "Moderate buy" label no longer clips.
+
 ### Data pipelines (2 Nov, see [[Data Pipelines Handoff 2026-11-02]])
 - **Diagnosis:** only the cash rate was still updating. The credit branch requested an RBA page that usually isn't published yet, and its 404 stopped every later branch. Several parsers and URLs were outdated, and the cash-rate "Update row" node was overwriting the unemployment row.
 - **Economic Indicators workflow fixed:** new ABS API host, correct series (seasonally adjusted unemployment, housing credit), cash-rate parser, credit-page fallback, isolated failures, range checks; "Update row" nodes removed.

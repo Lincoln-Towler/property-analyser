@@ -50,9 +50,9 @@ export function BtcHistoryChart({
     <div className="h-72 w-full">
       <ResponsiveContainer>
         <LineChart data={data} margin={{ top: 8, right: 56, bottom: 0, left: 0 }}>
-          <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" vertical={false} />
+          <CartesianGrid stroke={COLORS.grid} vertical={false} />
           {support !== null && resistance !== null && (
-            <ReferenceArea y1={support} y2={resistance} fill={COLORS.btc} fillOpacity={0.08} stroke="none" />
+            <ReferenceArea y1={support} y2={resistance} fill={COLORS.primary} fillOpacity={0.05} stroke="none" />
           )}
           {visible.map((level) => {
             const isBand = level === support || level === resistance;
@@ -60,14 +60,14 @@ export function BtcHistoryChart({
               <ReferenceLine
                 key={level}
                 y={level}
-                stroke={isBand ? COLORS.btc : '#475569'}
-                strokeOpacity={isBand ? 0.9 : 0.7}
+                stroke={COLORS.primary}
+                strokeOpacity={isBand ? 0.4 : 0.14}
                 strokeDasharray={isBand ? '6 3' : '2 4'}
                 label={{
                   value: fmtMoneyTick(level),
                   position: 'right',
-                  fill: isBand ? COLORS.btc : COLORS.axis,
-                  fontSize: 10,
+                  fill: isBand ? COLORS.secondary : COLORS.axis,
+                  fontSize: 11,
                 }}
               />
             );
@@ -81,14 +81,16 @@ export function BtcHistoryChart({
             tickFormatter={axis.format}
             tick={AXIS_TICK}
             tickMargin={6}
+            axisLine={false}
+            tickLine={false}
           />
-          <YAxis tick={AXIS_TICK} width={52} domain={y.domain} ticks={y.ticks} tickFormatter={fmtMoneyTick} />
+          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} domain={y.domain} ticks={y.ticks} tickFormatter={fmtMoneyTick} />
           <Tooltip
             {...TOOLTIP_STYLE}
             labelFormatter={(t: number) => fmtDate(tsToIso(t))}
             formatter={(value: number) => [fmtUsd(value), 'price']}
           />
-          <Line type="linear" dataKey="price" stroke={COLORS.btc} strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Line type="linear" dataKey="price" stroke={COLORS.accent} strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: 'none' }} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>

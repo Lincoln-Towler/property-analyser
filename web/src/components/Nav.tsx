@@ -1,9 +1,10 @@
 'use client';
 
-// Site navigation. Client component only for usePathname (active state).
-// On narrow screens the links sit under the brand and wrap onto a second
-// row, so every page stays reachable and the page never scrolls sideways.
+// Site navigation. On narrow screens the links are one row that scrolls
+// sideways inside itself, so the header stays short and the page never shifts,
+// and the current page is scrolled into view.
 
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -14,20 +15,29 @@ export interface NavItem {
 
 export function Nav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
+  const navRef = useRef<HTMLElement>(null);
+  const activeRef = useRef<HTMLAnchorElement>(null);
+
+  // Scrolls this row only. scrollIntoView could also move the page itself.
+  useEffect(() => {
+    const nav = navRef.current;
+    const link = activeRef.current;
+    if (nav && link) nav.scrollLeft = link.offsetLeft - (nav.clientWidth - link.offsetWidth) / 2;
+  }, [pathname]);
+
   return (
-    <nav aria-label="Main">
-      <ul className="-ml-3 flex flex-wrap gap-1 text-sm sm:ml-0 sm:flex-nowrap">
+    <nav ref={navRef} aria-label="Main" className="no-scrollbar relative min-w-0 flex-1 overflow-x-auto sm:flex-none">
+      <ul className="flex gap-1 text-sm">
         {items.map((item) => {
           const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
           return (
             <li key={item.href}>
               <Link
+                ref={active ? activeRef : undefined}
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                className={`block whitespace-nowrap rounded-md px-3 py-1.5 transition ${
-                  active
-                    ? 'bg-sky-500/15 font-medium text-sky-300'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                className={`block whitespace-nowrap rounded-lg px-2.5 py-1.5 transition-colors ${
+                  active ? 'bg-tile font-medium text-primary' : 'text-secondary hover:text-primary'
                 }`}
               >
                 {item.label}
