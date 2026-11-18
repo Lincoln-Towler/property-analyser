@@ -18,6 +18,14 @@ export function fmtDate(iso: string | null | undefined): string {
   return `${p[2]} ${MONTHS[p[1] - 1]} ${p[0]}`;
 }
 
+/** '2026-11-01' → '1 Nov' */
+export function fmtDayMonth(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const p = isoParts(iso);
+  if (!p) return iso;
+  return `${p[2]} ${MONTHS[p[1] - 1]}`;
+}
+
 /** '2026-11-01' → "Nov '26" */
 export function fmtMonthYear(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -26,11 +34,28 @@ export function fmtMonthYear(iso: string | null | undefined): string {
   return `${MONTHS[p[1] - 1]} '${String(p[0]).slice(2)}`;
 }
 
-/** ISO timestamp → '2 Nov 2026, 02:53 UTC' */
-export function fmtDateTimeUtc(iso: string | null | undefined): string {
+/** ISO timestamp → "6:01 am ACDT, 3 Nov": Adelaide time, with its zone. */
+export function fmtAdelaideTime(iso: string | null | undefined): string {
   if (!iso) return '—';
-  const time = /T(\d{2}:\d{2})/.exec(iso)?.[1];
-  return time ? `${fmtDate(iso)}, ${time} UTC` : fmtDate(iso);
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const parts = new Intl.DateTimeFormat('en-AU', {
+    timeZone: 'Australia/Adelaide',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+    day: 'numeric',
+    month: 'numeric',
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('hour')}:${get('minute')} ${get('dayPeriod').toLowerCase()} ${get('timeZoneName')}, ${get('day')} ${MONTHS[Number(get('month')) - 1]}`;
+}
+
+/** 'SELL / TAKE PROFIT' → 'Sell / take profit'; 'Moderate Buy' → 'Moderate buy'. */
+export function sentenceCase(text: string): string {
+  const lower = text.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 /** Epoch ms → ISO date, for chart axes that work in timestamps. */

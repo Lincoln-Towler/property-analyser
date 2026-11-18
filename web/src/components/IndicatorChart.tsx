@@ -21,7 +21,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { COLORS, TOOLTIP_STYLE, AXIS_TICK, SIGNAL_BANDS } from '@/lib/theme';
-import { fmtDate, fmtIndicator, fmtIndicatorTick, isoToTs, niceScale, timeAxis, tsToIso } from '@/lib/format';
+import { fmtDate, fmtIndicator, fmtIndicatorTick, isoToTs, niceScale, sentenceCase, timeAxis, tsToIso } from '@/lib/format';
 
 export interface ChartPoint {
   date: string;
@@ -64,7 +64,7 @@ export function IndicatorChart({
     <div className="h-56 w-full">
       <ResponsiveContainer>
         <LineChart data={data} margin={{ top: 10, right: 12, bottom: 0, left: 0 }}>
-          <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" vertical={false} />
+          <CartesianGrid stroke={COLORS.grid} vertical={false} />
           <XAxis
             dataKey="t"
             type="number"
@@ -74,9 +74,11 @@ export function IndicatorChart({
             tickFormatter={axis.format}
             tick={AXIS_TICK}
             tickMargin={6}
+            axisLine={false}
+            tickLine={false}
           />
-          <YAxis tick={AXIS_TICK} width={48} domain={y.domain} ticks={y.ticks} tickFormatter={fmtIndicatorTick} />
-          {band && <ReferenceArea y1={band[0]} y2={band[1]} fill={COLORS.good} fillOpacity={0.1} stroke="none" />}
+          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={48} domain={y.domain} ticks={y.ticks} tickFormatter={fmtIndicatorTick} />
+          {band && <ReferenceArea y1={band[0]} y2={band[1]} fill={COLORS.good} fillOpacity={0.12} stroke="none" />}
           {warning && (
             <ReferenceLine
               y={warning.value}
@@ -96,7 +98,7 @@ export function IndicatorChart({
             stroke={COLORS.accent}
             strokeWidth={2}
             dot={showDots ? { r: 2.5, fill: COLORS.accent } : false}
-            activeDot={{ r: 4 }}
+            activeDot={{ r: 4, stroke: 'none' }}
             isAnimationActive={false}
           />
         </LineChart>
@@ -122,7 +124,7 @@ export function ScoreHistoryChart({ points }: { points: Array<{ date: string; sc
   return (
     <div className="h-36 w-full">
       <ResponsiveContainer>
-        <LineChart data={data} margin={{ top: 4, right: 76, bottom: 0, left: 0 }}>
+        <LineChart data={data} margin={{ top: 4, right: 84, bottom: 0, left: 0 }}>
           {/* Zone names sit in the right-hand gutter, outside the plot, so the
               line can never run through them. */}
           {zones.map((z) => (
@@ -131,9 +133,9 @@ export function ScoreHistoryChart({ points }: { points: Array<{ date: string; sc
               y1={Math.max(z.from, lo)}
               y2={Math.min(z.to, hi)}
               fill={z.color}
-              fillOpacity={0.09}
+              fillOpacity={0.08}
               stroke="none"
-              label={{ value: z.label, position: 'right', fill: z.color, fontSize: 10 }}
+              label={{ value: sentenceCase(z.label), position: 'right', fill: COLORS.axis, fontSize: 11 }}
             />
           ))}
           <XAxis
@@ -145,14 +147,16 @@ export function ScoreHistoryChart({ points }: { points: Array<{ date: string; sc
             tickFormatter={axis.format}
             tick={AXIS_TICK}
             tickMargin={4}
+            axisLine={false}
+            tickLine={false}
           />
-          <YAxis domain={[lo, hi]} ticks={zones.map((z) => Math.max(z.from, lo)).concat(hi)} tick={AXIS_TICK} width={28} />
+          <YAxis domain={[lo, hi]} ticks={zones.map((z) => Math.max(z.from, lo)).concat(hi)} tick={AXIS_TICK} axisLine={false} tickLine={false} width={28} />
           <Tooltip
             {...TOOLTIP_STYLE}
             labelFormatter={(t: number) => fmtDate(tsToIso(t))}
             formatter={(value: number) => [value.toFixed(1), 'score']}
           />
-          <Line type="stepAfter" dataKey="score" stroke="#e2e8f0" strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Line type="stepAfter" dataKey="score" stroke={COLORS.primary} strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: 'none' }} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>

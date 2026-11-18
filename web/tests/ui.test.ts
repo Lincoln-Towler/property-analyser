@@ -1,18 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import {
+  fmtAdelaideTime,
   fmtDate,
-  fmtDateTimeUtc,
+  fmtDayMonth,
   fmtIndicator,
   fmtMonthYear,
   fmtPriceCompact,
   niceScale,
+  sentenceCase,
   stripLeadingEmoji,
   timeTicks,
 } from '../src/lib/format';
-import { SIGNAL_BANDS, signalBand } from '../src/lib/theme';
+import { SIGNAL_BANDS, bandDistances, signalBand } from '../src/lib/theme';
 import { signalForScore } from '../src/lib/scoring/engine';
 import { INDICATORS_CONFIG } from '../src/lib/scoring/config';
-import { indicatorTargetText, statusPhrase, targetBand, warningLine } from '../src/lib/scoring/ui-helpers';
+import {
+  cycleCaption,
+  indicatorLabel,
+  indicatorTargetText,
+  riskNotice,
+  scoreDaysAgo,
+  statusPhrase,
+  targetBand,
+  warningLine,
+} from '../src/lib/scoring/ui-helpers';
 import { groupByPublisher, sourcePublisher } from '../src/lib/sources';
 import {
   BTC_MODIFIER_CAP,
@@ -24,6 +35,7 @@ import {
   groupFlags,
   levelSignalClass,
   scoreCeiling,
+  signalTextClass,
   stanceClass,
 } from '../src/lib/btc-view';
 import { andersonState } from '../src/lib/scoring/anderson';
@@ -36,7 +48,12 @@ describe('format', () => {
     expect(fmtDate('2026-08-01T19:31:08.966504+00:00')).toBe('1 Aug 2026');
     expect(fmtDate(null)).toBe('—');
     expect(fmtMonthYear('2026-03-24')).toBe("Mar '26");
-    expect(fmtDateTimeUtc('2026-11-02T02:53:11.000Z')).toBe('2 Nov 2026, 02:53 UTC');
+    // Adelaide time with its zone, in both daylight saving and standard time
+    expect(fmtAdelaideTime('2026-11-02T19:31:10Z')).toBe('6:01 am ACDT, 3 Nov');
+    expect(fmtAdelaideTime('2026-07-01T03:00:00Z')).toBe('12:30 pm ACST, 1 Jul');
+    expect(fmtAdelaideTime(null)).toBe('—');
+    expect(sentenceCase('SELL / TAKE PROFIT')).toBe('Sell / take profit');
+    expect(sentenceCase('Moderate Buy')).toBe('Moderate buy');
   });
 
   it('formats property prices compactly', () => {
@@ -195,7 +212,9 @@ describe('btc view', () => {
   });
 
   it('colours chips for both stored labels and signal text', () => {
-    expect(levelSignalClass('CAUTION / REDUCE')).toContain('orange');
+    expect(levelSignalClass('CAUTION / REDUCE')).toBe('bg-reduce text-ink');
+    expect(signalTextClass('CAUTION / REDUCE')).toBe('text-reduce');
+    expect(signalTextClass('MAX_BUY')).toBe('text-max-buy');
     expect(levelSignalClass('SELL / TAKE PROFIT')).toBe(levelSignalClass('SELL'));
     expect(levelSignalClass('LIGHT BUY')).toBe(levelSignalClass('LIGHT_BUY'));
   });
@@ -219,8 +238,8 @@ describe('btc view', () => {
   });
 
   it('colours stance chips, and anything unexpected stays neutral', () => {
-    expect(stanceClass('bearish')).toContain('red');
-    expect(stanceClass('bullish')).toContain('emerald');
+    expect(stanceClass('bearish')).toContain('danger');
+    expect(stanceClass('bullish')).toContain('go');
     expect(stanceClass('mixed')).toBe(stanceClass('neutral'));
   });
 
@@ -252,6 +271,68 @@ describe('anderson advice', () => {
 
 describe('location labels', () => {
   it('calls the median_price metric what it now holds: an asking price', () => {
-    expect(METRIC_LABELS.median_price).toBe('Asking Price (3-bed)');
+    expect(METRIC_LABELS.median_price).toBe('Asking price (3-bed)');
   });
 });
+
+describe('display wording', () => {
+  it('names indicators in plain sentence case', () => {
+    expect(indicatorLabel('interest_rate')).toBe('Cash rate');
+    expect(indicatorLabel('some_new_thing')).toBe('Some new thing');
+  });
+
+  it('describes the cycle from the numbers the score uses', () => {
+    expect(cycleCaption(0.9, 18)).toBe('Late cycle, year 18 of 18.6');
+    expect(cycleCaption(1.1, 0.4)).toBe('Early cycle, year 0 of 18.6');
+    expect(cycleCaption(1, 5.4)).toBe('Cycle, year 5 of 18.6');
+    expect(cycleCaption(0.9, undefined)).toBeNull();
+  });
+
+  it('turns engine warnings into calm text with the right status', () => {
+    expect(riskNotice('⚠️ PERFECT STORM: High debt + High rates + High stress')).toEqual({
+      status: 'danger',
+      text: 'Perfect storm: high debt + high rates + high stress',
+    });
+    expect(riskNotice('✨ OPPORTUNITY: Severe supply shortage + Strong demand').status).toBe('success');
+    expect(riskNotice('⚠️ OVERSUPPLY: High vacancy + Excessive building').status).toBe('warning');
+  });
+});
+
+describe('market meter', () => {
+  it('measures the distance to the bands either side', () => {
+    const near = bandDistances(41.04);
+    expect(near.below?.label).toBe('Caution');
+    expect(near.below?.distance).toBeCloseTo(1.04, 5);
+    expect(near.above?.label).toBe('Moderate Buy');
+    expect(near.above?.distance).toBeCloseTo(8.96, 5);
+  });
+
+  it('has no band below Wait or above Strong buy', () => {
+    expect(bandDistances(12).below).toBeNull();
+    expect(bandDistances(12).above).toEqual({ label: 'Caution', distance: 18 });
+    expect(bandDistances(100).above).toBeNull();
+    expect(bandDistances(100).below).toEqual({ label: 'Buy', distance: 25 });
+  });
+
+  it('starts the trail at the newest snapshot at least 30 days old', () => {
+    const rows = [
+      { score_date: '2026-11-17', final_score: 41.04 },
+      { score_date: '2026-10-19', final_score: 43.02 },
+      { score_date: '2026-10-18', final_score: 43.1 },
+      { score_date: '2026-10-17', final_score: 44 },
+    ];
+    // 17 Nov minus 30 days is 18 Oct; 19 Oct is too recent.
+    expect(scoreDaysAgo(rows)).toEqual({ score: 43.1, date: '2026-10-18' });
+  });
+
+  it('has no trail when the history is shorter than 30 days', () => {
+    expect(scoreDaysAgo([{ score_date: '2026-11-17', final_score: 41 }])).toBeNull();
+    expect(scoreDaysAgo([])).toBeNull();
+  });
+
+  it('writes short dates without the year', () => {
+    expect(fmtDayMonth('2026-10-18')).toBe('18 Oct');
+    expect(fmtDayMonth(null)).toBe('—');
+  });
+});
+

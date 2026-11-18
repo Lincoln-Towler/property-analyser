@@ -10,13 +10,13 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   parts.forEach((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      nodes.push(<strong key={`${keyBase}-b${i}`}>{part.slice(2, -2)}</strong>);
+      nodes.push(<strong key={`${keyBase}-b${i}`} className="font-semibold text-primary">{part.slice(2, -2)}</strong>);
     } else {
       const italics = part.split(/(_[^_]+_)/g);
       italics.forEach((seg, j) => {
         if (seg.startsWith('_') && seg.endsWith('_') && seg.length > 2) {
           nodes.push(
-            <em key={`${keyBase}-i${i}-${j}`} className="text-slate-400">
+            <em key={`${keyBase}-i${i}-${j}`} className="text-tertiary">
               {seg.slice(1, -1)}
             </em>,
           );
@@ -59,5 +59,5 @@ export function Markdown({ text }: { text: string }) {
   });
   flushBullets('ul-end');
 
-  return <div className="space-y-3 text-sm leading-relaxed text-slate-200">{blocks}</div>;
+  return <div className="space-y-3 text-sm leading-relaxed text-secondary">{blocks}</div>;
 }

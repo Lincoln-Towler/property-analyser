@@ -122,12 +122,12 @@ export function isAskingPriceReading(p: PropertyPoint): boolean {
 }
 
 export const METRIC_LABELS: Record<string, string> = {
-  median_price: 'Asking Price (3-bed)',
-  annual_growth: '12-Month Growth',
-  rental_yield: 'Rental Yield',
-  vacancy_rate: 'Vacancy Rate',
-  days_on_market: 'Days on Market',
-  sales_volume: 'Sales Volume',
+  median_price: 'Asking price (3-bed)',
+  annual_growth: '12-month growth',
+  rental_yield: 'Rental yield',
+  vacancy_rate: 'Vacancy rate',
+  days_on_market: 'Days on market',
+  sales_volume: 'Sales volume',
 };
 
 export function formatMetric(metric: string, value: number | undefined): string {

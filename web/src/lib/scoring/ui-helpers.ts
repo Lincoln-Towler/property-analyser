@@ -2,6 +2,7 @@
 // indicator_target_text / indicator_progress_fraction / indicator_status.
 
 import type { IndicatorConfig } from './config';
+import { sentenceCase, stripLeadingEmoji } from '../format';
 
 export function indicatorTargetText(config: IndicatorConfig): string | null {
   const unit = config.unit ?? '';
@@ -117,4 +118,57 @@ export function indicatorStatus(value: number | null, config: IndicatorConfig): 
     return 'warning';
   }
   return 'warning';
+}
+
+const INDICATOR_LABELS: Record<string, string> = {
+  interest_rate: 'Cash rate',
+  household_debt_gdp: 'Household debt to GDP',
+  rental_vacancy_rate: 'Rental vacancy',
+  building_approvals: 'Building approvals',
+  mortgage_stress_rate: 'Mortgage stress',
+  unemployment_rate: 'Unemployment',
+  auction_clearance_rate: 'Auction clearance',
+  credit_growth: 'Credit growth',
+  wage_growth: 'Wage growth',
+  mortgage_arrears_rate: 'Mortgage arrears',
+  dwelling_supply_deficit: 'Dwelling supply deficit',
+  population_growth: 'Population growth',
+};
+
+/** Short sentence-case name for the UI. The config's display_name stays as it
+ *  is, because the parity-tested commentary uses it. */
+export function indicatorLabel(name: string): string {
+  return INDICATOR_LABELS[name] ?? sentenceCase(name.replace(/_/g, ' '));
+}
+
+/** "Late cycle, year 18 of 18.6", from the same numbers the score uses. */
+export function cycleCaption(multiplier: number | undefined, position: number | undefined): string | null {
+  if (position === undefined) return null;
+  const phase = multiplier === 0.9 ? 'Late cycle' : multiplier === 1.1 ? 'Early cycle' : multiplier === 1.05 ? 'Mid cycle' : 'Cycle';
+  return `${phase}, year ${Math.floor(position)} of 18.6`;
+}
+
+/** An engine risk warning as calm text, with the status it carries. */
+export function riskNotice(warning: string): { status: 'success' | 'warning' | 'danger'; text: string } {
+  const text = sentenceCase(stripLeadingEmoji(warning));
+  if (/^opportunity/i.test(text)) return { status: 'success', text };
+  if (/^oversupply/i.test(text)) return { status: 'warning', text };
+  return { status: 'danger', text };
+}
+
+/** The newest daily snapshot at least `days` before the latest one: where the
+ *  meter's trail starts. Null when the history is shorter than that. */
+export function scoreDaysAgo(
+  rows: Array<{ score_date: string; final_score: number }>,
+  days = 30,
+): { score: number; date: string } | null {
+  if (!rows.length) return null;
+  const sorted = [...rows].sort((a, b) => a.score_date.localeCompare(b.score_date));
+  const cutoff = Date.parse(sorted[sorted.length - 1].score_date) - days * 86_400_000;
+  let found: { score_date: string; final_score: number } | null = null;
+  for (const r of sorted) {
+    if (Date.parse(r.score_date) > cutoff) break;
+    found = r;
+  }
+  return found ? { score: Number(found.final_score), date: found.score_date } : null;
 }

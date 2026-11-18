@@ -122,15 +122,15 @@ export function changeName(change: BtcFlagChange, flags: BtcContextFlag[]): stri
   );
 }
 
-/** Tailwind classes for a video's stance chip. */
+/** A video's stance as coloured text: red bearish, green bullish, grey otherwise. */
 export function stanceClass(stance: string): string {
   switch (stance) {
     case 'bearish':
-      return 'bg-red-500/15 text-red-300 ring-red-500/30';
+      return 'text-danger';
     case 'bullish':
-      return 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30';
+      return 'text-go';
     default:
-      return 'bg-slate-500/15 text-slate-300 ring-slate-500/30';
+      return 'text-secondary';
   }
 }
 
@@ -141,24 +141,29 @@ export const CATEGORY_LABEL: Record<string, string> = {
   OTHER: 'Other',
 };
 
-/** Tailwind classes for a signal chip, sell → max buy. Accepts both the
- *  stored level labels ('LIGHT_BUY') and get_btc_signal() text
- *  ('CAUTION / REDUCE'). */
+// Each signal's colour, as a solid fill (with ink on it) and as text. Spelled out
+// in full so Tailwind generates every class.
+const SIGNAL_TONES: Record<string, { fill: string; text: string }> = {
+  SELL: { fill: 'bg-danger text-ink', text: 'text-danger' },
+  CAUTION: { fill: 'bg-reduce text-ink', text: 'text-reduce' },
+  HOLD: { fill: 'bg-caution text-ink', text: 'text-caution' },
+  'LIGHT BUY': { fill: 'bg-light-buy text-ink', text: 'text-light-buy' },
+  BUY: { fill: 'bg-buy text-ink', text: 'text-buy' },
+  'STRONG BUY': { fill: 'bg-go text-ink', text: 'text-go' },
+};
+const MAX_BUY_TONE = { fill: 'bg-max-buy text-ink', text: 'text-max-buy' };
+
+/** Accepts both the stored level labels ('LIGHT_BUY') and get_btc_signal() text ('CAUTION / REDUCE'). */
+function signalTone(signal: string) {
+  return SIGNAL_TONES[signal.replace(/_/g, ' ').split(' / ')[0]] ?? MAX_BUY_TONE;
+}
+
+/** Solid fill and ink. Only the page's one verdict uses this (web/DESIGN.md). */
 export function levelSignalClass(signal: string): string {
-  switch (signal.replace(/_/g, ' ').split(' / ')[0]) {
-    case 'SELL':
-      return 'bg-red-500/15 text-red-300 ring-red-500/30';
-    case 'CAUTION':
-      return 'bg-orange-500/15 text-orange-300 ring-orange-500/30';
-    case 'HOLD':
-      return 'bg-amber-500/15 text-amber-300 ring-amber-500/30';
-    case 'LIGHT BUY':
-      return 'bg-yellow-500/15 text-yellow-200 ring-yellow-500/30';
-    case 'BUY':
-      return 'bg-lime-500/15 text-lime-300 ring-lime-500/30';
-    case 'STRONG BUY':
-      return 'bg-green-500/15 text-green-300 ring-green-500/30';
-    default:
-      return 'bg-emerald-500/20 text-emerald-300 ring-emerald-500/40';
-  }
+  return signalTone(signal).fill;
+}
+
+/** The signal's colour as text, for everything that isn't the verdict. */
+export function signalTextClass(signal: string): string {
+  return signalTone(signal).text;
 }

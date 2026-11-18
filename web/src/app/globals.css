@@ -1,12 +1,83 @@
 @import 'tailwindcss';
 
+/* The borderless design system. web/DESIGN.md has the rules and the
+   measurements; tests/design.test.ts checks these values and keeps them in step
+   with lib/theme.ts. Tone does the separating: canvas, then surface, then tile. */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  --color-canvas: #0b0e13;
+  --color-surface: #171a1e;
+  --color-tile: #24272a;
+  --color-raised: #313437; /* popups float one step above whatever they open over */
+
+  --color-primary: #f2f5f7;
+  --color-secondary: rgb(255 255 255 / 0.62);
+  --color-tertiary: rgb(255 255 255 / 0.48);
+  --color-ink: #0b0e13;
+
+  --color-accent: #7aa6f0;
+
+  --color-danger: #e96660; /* #de5c57 read 4.13:1 on a tile; same hue and chroma, OKLCH L 0.64 → 0.67 */
+  --color-reduce: #e08850;
+  --color-caution: #e0a847;
+  --color-light-buy: #c8bc55;
+  --color-buy: #8fc060;
+  --color-go: #47c280;
+  --color-max-buy: #3fd0a6;
+}
+
 :root {
   color-scheme: dark;
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 antialiased;
-  font-feature-settings: 'cv11', 'ss01';
+  @apply bg-canvas text-primary antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The dashboard meter (components/ScoreGauge.tsx). The needle sweeps up from
+   zero and settles with a little overshoot, the way a real one does; then the
+   band it landed in lights up. Both are off for reduced motion. */
+@keyframes meter-sweep {
+  from {
+    transform: rotate(-90deg);
+  }
+}
+@keyframes meter-light {
+  from {
+    opacity: 0.28;
+  }
+}
+.meter-needle {
+  transform-box: view-box;
+  animation: meter-sweep 1.3s cubic-bezier(0.3, 1.3, 0.55, 1) both;
+}
+.meter-band-active {
+  animation: meter-light 0.5s ease-out 1s both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter-needle,
+  .meter-band-active {
+    animation: none;
+  }
+}
+
+/* Keyboard focus is the one place an outline belongs. */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Collapsible sections: rotate the marker when open. */

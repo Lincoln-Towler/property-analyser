@@ -8,16 +8,16 @@ import {
 } from '@/lib/scoring/location';
 import { LocationCompare, type PriceSeriesPoint } from '@/components/LocationCompare';
 import { SetupNotice } from '@/components/SetupNotice';
-import { Card, DataStamp, PageHeader, SectionTitle, StaleDate } from '@/components/ui';
+import { Bar, Card, DataStamp, Notice, PageHeader, SectionTitle, StaleDate } from '@/components/ui';
 import { LOCATION_GOOD, scoreTone } from '@/lib/theme';
 import { fmtDate } from '@/lib/format';
 
 export const revalidate = 3600;
 
 function metricTone(metric: string, value: number | undefined): string {
-  if (value === undefined) return 'text-slate-500';
-  if (metric === 'annual_growth') return value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-slate-300';
-  return 'text-slate-300';
+  if (value === undefined) return 'text-tertiary';
+  if (metric === 'annual_growth') return value > 0 ? 'text-go' : value < 0 ? 'text-danger' : 'text-secondary';
+  return 'text-primary';
 }
 
 const TABLE_METRICS = [
@@ -36,28 +36,28 @@ export default async function LocationsPage() {
   if (!rows.length) {
     const queryFailed = data.errors.propertyData;
     return (
-      <div className="space-y-4">
-        <PageHeader title="Location analysis" />
+      <div className="space-y-2.5">
+        <PageHeader title="Locations" />
         {queryFailed ? (
-          <div className="rounded-xl border border-red-700/60 bg-red-950/30 p-6 text-sm text-slate-200">
-            <p className="mb-2 font-medium">
-              The property_data query failed — this is not an empty table.
-            </p>
-            <p className="mb-3 font-mono text-xs text-red-300">{queryFailed}</p>
-            <p className="text-slate-300">
-              Most likely Row Level Security: the site reads with the anon key, which needs a
-              SELECT policy on <code className="rounded bg-slate-800 px-1">property_data</code>.
-              Migration{' '}
-              <code className="rounded bg-slate-800 px-1">0004_enable_rls.sql</code> creates one —
-              check it was applied, then confirm in Supabase → Authentication → Policies.
-            </p>
-          </div>
+          <>
+            <Notice status="danger">The property_data query failed. This isn&apos;t an empty table.</Notice>
+            <Card as="div">
+              <p className="mb-3 font-mono text-xs text-danger">{queryFailed}</p>
+              <p className="text-sm text-secondary">
+                Most likely Row Level Security: the site reads with the anon key, which needs a SELECT policy on{' '}
+                <code className="rounded bg-tile px-1">property_data</code>. Migration{' '}
+                <code className="rounded bg-tile px-1">0004_enable_rls.sql</code> creates one. Check it was applied, then confirm in
+                Supabase → Authentication → Policies.
+              </p>
+            </Card>
+          </>
         ) : (
-          <p className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-300">
-            No property data in the last 12 months. Add rows to{' '}
-            <code className="rounded bg-slate-800 px-1">property_data</code> (location,
-            metric_name, value, date) in Supabase to populate this page.
-          </p>
+          <Card as="div">
+            <p className="text-sm text-secondary">
+              No property data in the last 12 months. Add rows to <code className="rounded bg-tile px-1">property_data</code> (location,
+              metric_name, value, date) in Supabase to populate this page.
+            </p>
+          </Card>
         )}
       </div>
     );
@@ -83,81 +83,66 @@ export default async function LocationsPage() {
   const sharedAsOf = asOfDates.length === 1 ? asOfDates[0] : null;
 
   return (
-    <div className="space-y-8">
-      <PageHeader title="Location analysis">
-        {scored.length} locations scored on their latest readings. The investment score starts at 50 and
-        adjusts for annual growth, rental yield, vacancy rate and days on market. Asking price is SQM&apos;s
-        13-week average for 3-bed houses, not a sold median, and growth is measured on that asking price. Days on
+    <div className="space-y-2.5">
+      <PageHeader title="Locations">
+        {scored.length} locations, scored on their latest readings. The score starts at 50 and adjusts for growth, yield, vacancy and days
+        on market. Asking price is SQM&apos;s 13-week average for 3-bed houses, not a sold median, and growth is measured on it. Days on
         market is entered by hand, so it can be older; any reading older than the newest shows its month.
       </PageHeader>
 
       {divergence && (
         <Card>
           <SectionTitle>Regional divergence</SectionTitle>
-          <p className="text-sm text-slate-300">
-            Spread of <strong>{divergence.divergence}</strong> points between the strongest and
-            weakest markets ({best.location} {best.score} → {worst.location} {worst.score}).{' '}
-            {divergence.recommendation === 'selective' ? (
-              <>
-                Divergence is high — this is a <strong>selective</strong> market where location
-                choice matters more than timing.
-              </>
-            ) : (
-              <>
-                Divergence is low — markets are moving together, so a <strong>broad</strong>{' '}
-                approach is reasonable.
-              </>
-            )}
+          <p className="text-sm text-secondary">
+            A spread of <strong className="font-semibold text-primary">{divergence.divergence}</strong> points between the strongest and
+            weakest markets ({best.location} {best.score}, {worst.location} {worst.score}).{' '}
+            {divergence.recommendation === 'selective'
+              ? 'Divergence is high: a selective market, where location choice matters more than timing.'
+              : 'Divergence is low: markets are moving together, so a broad approach is reasonable.'}
           </p>
         </Card>
       )}
 
-      <section>
-        <SectionTitle
-          right={sharedAsOf ? <span className="text-xs text-slate-500">latest readings as of {fmtDate(sharedAsOf)}</span> : undefined}
-        >
-          All locations, ranked
-        </SectionTitle>
-        <div className="overflow-x-auto rounded-xl border border-slate-800">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-slate-900 text-left text-xs uppercase tracking-wider text-slate-400">
+      <Card>
+        <SectionTitle right={sharedAsOf ? `Latest readings as of ${fmtDate(sharedAsOf)}` : undefined}>All locations, ranked</SectionTitle>
+        <div className="no-scrollbar -mx-2 overflow-x-auto">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead className="text-left text-[11px] font-medium text-tertiary">
               <tr>
-                <th className="px-4 py-3">#</th>
-                <th className="px-4 py-3">Location</th>
-                <th className="px-4 py-3">Score</th>
+                <th className="px-2 pb-1.5 font-medium">#</th>
+                <th className="px-2 pb-1.5 font-medium">Location</th>
+                <th className="px-2 pb-1.5 font-medium">Score</th>
                 {TABLE_METRICS.map((m) => (
-                  <th key={m} className="px-4 py-3 text-right">
+                  <th key={m} className="px-2 pb-1.5 text-right font-medium">
                     {METRIC_LABELS[m]}
                   </th>
                 ))}
-                {!sharedAsOf && <th className="px-4 py-3">As of</th>}
+                {!sharedAsOf && <th className="px-2 pb-1.5 font-medium">As of</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody>
               {scored.map((loc, i) => {
                 const tone = scoreTone(loc.score, LOCATION_GOOD);
                 return (
-                  <tr key={loc.location} className="hover:bg-slate-900/60">
-                    <td className="px-4 py-3 tabular-nums text-slate-500">{i + 1}</td>
-                    <td className="whitespace-nowrap px-4 py-3 font-medium">{loc.location}</td>
-                    <td className="px-4 py-3">
+                  <tr key={loc.location} className="transition-colors hover:bg-tile">
+                    <td className="rounded-l-lg px-2 py-1.5 text-tertiary">{i + 1}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">{loc.location}</td>
+                    <td className="px-2 py-1.5">
                       <div className="flex items-center gap-2">
-                        <span className={`w-7 tabular-nums font-semibold ${tone.text}`}>{loc.score}</span>
-                        <div className="h-1.5 w-16 rounded-full bg-slate-800" aria-hidden>
-                          <div className={`h-1.5 rounded-full ${tone.bar}`} style={{ width: `${loc.score}%` }} />
+                        <span className={`w-7 font-medium ${tone.text}`}>{loc.score}</span>
+                        <div className="w-16">
+                          <Bar value={loc.score} fill={tone.bar} />
                         </div>
                       </div>
                     </td>
                     {TABLE_METRICS.map((m) => (
-                      <td key={m} className={`whitespace-nowrap px-4 py-3 text-right tabular-nums ${metricTone(m, loc.metrics[m]?.value)}`}>
+                      <td key={m} className={`whitespace-nowrap px-2 py-1.5 text-right last:rounded-r-lg ${metricTone(m, loc.metrics[m]?.value)}`}>
                         {formatMetric(m, loc.metrics[m]?.value)}
                         <StaleDate date={loc.metrics[m]?.date} latest={loc.latestDate} />
                       </td>
                     ))}
                     {!sharedAsOf && (
-                      <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums text-slate-500">
-                        {fmtDate(loc.latestDate)}
-                      </td>
+                      <td className="whitespace-nowrap rounded-r-lg px-2 py-1.5 text-xs text-tertiary">{fmtDate(loc.latestDate)}</td>
                     )}
                   </tr>
                 );
@@ -165,12 +150,12 @@ export default async function LocationsPage() {
             </tbody>
           </table>
         </div>
-      </section>
+      </Card>
 
-      <section>
+      <Card>
         <SectionTitle>Head to head</SectionTitle>
         <LocationCompare scored={scored} priceSeries={priceSeries} />
-      </section>
+      </Card>
 
       <DataStamp fetchedAt={data.fetchedAt} />
     </div>
